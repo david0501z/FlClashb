@@ -293,3 +293,4 @@ class DownloadsNotifier extends _$DownloadsNotifier {
     }
   }
 }
+
