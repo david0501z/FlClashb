@@ -58,7 +58,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
         // Android WebView代理设置
         controller.setBackgroundColor(const Color(0xFFFFFFFF));
         // 设置Android WebView的系统属性
-        controller.runJavaScriptBeforeLoad("""
+        controller.runJavaScript("""
           // 强制设置Android WebView代理
           if (typeof navigator !== 'undefined') {
             Object.defineProperty(navigator, 'proxy', {
@@ -69,7 +69,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
         """);
       } else if (Platform.isIOS) {
         // iOS WKWebView代理设置
-        controller.runJavaScriptBeforeLoad("""
+        controller.runJavaScript("""
           // iOS WebView代理设置
           if (typeof window.webkit !== 'undefined') {
             console.log('Setting iOS proxy to 127.0.0.1:7890');
@@ -77,7 +77,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
         """);
       } else {
         // 桌面平台代理设置
-        controller.runJavaScriptBeforeLoad("""
+        controller.runJavaScript("""
           // Desktop WebView代理设置
           console.log('Desktop proxy: 127.0.0.1:7890');
         """);
@@ -583,7 +583,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     debugPrint('ULTIMATE FORCE configuring WebView proxy: $host:$port');
     
     // 使用最底层的代理强制方法
-    controller.runJavaScriptBeforeLoad("""
+    controller.runJavaScript("""
       (function() {
         console.log('=== ULTIMATE PROXY ENFORCEMENT ===');
         
