@@ -27,7 +27,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     super.initState();
     // 创建初始标签页
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(browserTabsNotifier.notifier).createNewTab(url: 'https://www.google.com');
+      ref.read(browserTabsProvider.notifier).createNewTab(url: 'https://www.google.com');
     });
   }
 
@@ -53,7 +53,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
               setState(() {
                 _loadingProgress[tabId] = 0;
               });
-              ref.read(browserTabsNotifier.notifier).updateTab(
+              ref.read(browserTabsProvider.notifier).updateTab(
                 tabId,
                 url: url,
                 status: BrowserTabStatus.loading,
@@ -70,7 +70,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
                 setState(() {
                   _currentTitles[tabId] = title;
                 });
-                ref.read(browserTabsNotifier.notifier).updateTab(
+                ref.read(browserTabsProvider.notifier).updateTab(
                   tabId,
                   title: title,
                   url: url,
@@ -87,7 +87,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
             },
             onWebResourceError: (WebResourceError error) {
               debugPrint('Web resource error: ${error.description}');
-              ref.read(browserTabsNotifier.notifier).updateTab(
+              ref.read(browserTabsProvider.notifier).updateTab(
                 tabId,
                 status: BrowserTabStatus.error,
               );
@@ -116,16 +116,15 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
 
   void _handleDownload(String url) {
     final fileName = url.split('/').last;
-    ref.read(downloadsNotifierProvider.notifier).startDownload(url, fileName: fileName);
-    showSnackBar(
-      context: context,
-      message: '开始下载: $fileName',
+    ref.read(downloadsProvider.notifier).startDownload(url, fileName: fileName);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('开始下载: $fileName')),
     );
   }
 
   void _navigateToUrl(String url) {
     if (url.isNotEmpty) {
-      final activeTab = ref.read(browserTabsNotifierProvider).activeTab;
+      final activeTab = ref.read(browserTabsProvider).activeTab;
       if (activeTab != null) {
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
           url = 'https://$url';
@@ -136,11 +135,11 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   }
 
   void _createNewTab() {
-    ref.read(browserTabsNotifierProvider.notifier).createNewTab();
+    ref.read(browserTabsProvider.notifier).createNewTab();
   }
 
   void _closeTab(String tabId) {
-    ref.read(browserTabsNotifierProvider.notifier).closeTab(tabId);
+    ref.read(browserTabsProvider.notifier).closeTab(tabId);
     _controllers.remove(tabId);
     _loadingProgress.remove(tabId);
     _canGoBack.remove(tabId);
@@ -149,32 +148,32 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   }
 
   void _switchToTab(String tabId) {
-    ref.read(browserTabsNotifierProvider.notifier).setActiveTab(tabId);
+    ref.read(browserTabsProvider.notifier).setActiveTab(tabId);
   }
 
   void _goBack() {
-    final activeTab = ref.read(browserTabsNotifierProvider).activeTab;
+    final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null && (_canGoBack[activeTab.id] ?? false)) {
       _getOrCreateController(activeTab.id).goBack();
     }
   }
 
   void _goForward() {
-    final activeTab = ref.read(browserTabsNotifierProvider).activeTab;
+    final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null && (_canGoForward[activeTab.id] ?? false)) {
       _getOrCreateController(activeTab.id).goForward();
     }
   }
 
   void _reload() {
-    final activeTab = ref.read(browserTabsNotifierProvider).activeTab;
+    final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null) {
       _getOrCreateController(activeTab.id).reload();
     }
   }
 
   void _goHome() {
-    final activeTab = ref.read(browserTabsNotifierProvider).activeTab;
+    final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null) {
       _urlController.clear();
       _getOrCreateController(activeTab.id).loadRequest(Uri.parse('https://www.google.com'));
@@ -184,7 +183,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   @override
   Widget build(BuildContext context) {
     final proxyState = ref.watch(proxyStateProvider);
-    final tabsState = ref.watch(browserTabsNotifierProvider);
+    final tabsState = ref.watch(browserTabsProvider);
     final activeTab = tabsState.activeTab;
     
     return Scaffold(
@@ -435,7 +434,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
                         const SizedBox(width: 8),
                         Consumer(
                           builder: (context, ref, child) {
-                            final downloadsState = ref.watch(downloadsNotifierProvider);
+                            final downloadsState = ref.watch(downloadsProvider);
                             final activeDownloads = downloadsState.activeDownloads.length;
                             return Text('下载记录${activeDownloads > 0 ? ' ($activeDownloads)' : ''}');
                           },
@@ -475,9 +474,9 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
           onTap: () => _closeTab(tab.id),
           child: const Text('关闭标签'),
         ),
-        if (ref.read(browserTabsNotifierProvider).tabs.length > 1)
+        if (ref.read(browserTabsProvider).tabs.length > 1)
           PopupMenuItem(
-            onTap: () => ref.read(browserTabsNotifierProvider.notifier).closeOtherTabs(tab.id),
+            onTap: () => ref.read(browserTabsProvider.notifier).closeOtherTabs(tab.id),
             child: const Text('关闭其他标签'),
           ),
       ],
@@ -500,9 +499,8 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   }
 
   void _showSettings() {
-    showSnackBar(
-      context: context,
-      message: '浏览器设置功能正在开发中...',
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('浏览器设置功能正在开发中...')),
     );
   }
 }
@@ -517,7 +515,7 @@ class DownloadsPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final downloadsState = ref.watch(downloadsNotifierProvider);
+    final downloadsState = ref.watch(downloadsProvider);
     
     return Container(
       decoration: BoxDecoration(
@@ -549,7 +547,7 @@ class DownloadsPanel extends ConsumerWidget {
                 if (downloadsState.completedDownloads.isNotEmpty)
                   TextButton(
                     onPressed: () {
-                      ref.read(downloadsNotifierProvider.notifier).clearCompleted();
+                      ref.read(downloadsProvider.notifier).clearCompleted();
                     },
                     child: const Text('清除已完成'),
                   ),
@@ -647,21 +645,21 @@ class DownloadItemTile extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.pause),
               onPressed: () {
-                ref.read(downloadsNotifierProvider.notifier).pauseDownload(download.id);
+                ref.read(downloadsProvider.notifier).pauseDownload(download.id);
               },
             ),
           if (download.status == DownloadStatus.paused)
             IconButton(
               icon: const Icon(Icons.play_arrow),
               onPressed: () {
-                ref.read(downloadsNotifierProvider.notifier).resumeDownload(download.id);
+                ref.read(downloadsProvider.notifier).resumeDownload(download.id);
               },
             ),
           if (download.status == DownloadStatus.failed)
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () {
-                ref.read(downloadsNotifierProvider.notifier).retryDownload(download.id);
+                ref.read(downloadsProvider.notifier).retryDownload(download.id);
               },
             ),
           if (download.status == DownloadStatus.completed)
@@ -669,9 +667,8 @@ class DownloadItemTile extends ConsumerWidget {
               icon: const Icon(Icons.folder_open),
               onPressed: () {
                 // 打开下载文件夹
-                showSnackBar(
-                  context: context,
-                  message: '下载位置: ${download.filePath}',
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('下载位置: ${download.filePath}')),
                 );
               },
             ),
@@ -679,10 +676,10 @@ class DownloadItemTile extends ConsumerWidget {
             onSelected: (value) {
               switch (value) {
                 case 'cancel':
-                  ref.read(downloadsNotifierProvider.notifier).cancelDownload(download.id);
+                  ref.read(downloadsProvider.notifier).cancelDownload(download.id);
                   break;
                 case 'remove':
-                  ref.read(downloadsNotifierProvider.notifier).removeDownload(download.id);
+                  ref.read(downloadsProvider.notifier).removeDownload(download.id);
                   break;
               }
             },
