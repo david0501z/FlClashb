@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:fl_clash/models/download.dart';
 import 'package:fl_clash/models/browser_tab.dart';
 import 'package:uuid/uuid.dart';
