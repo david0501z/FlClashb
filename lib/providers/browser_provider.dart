@@ -70,9 +70,9 @@ class BrowserTabsNotifier extends _$BrowserTabsNotifier {
     if (tabIndex == -1) return;
 
     final updatedTab = state.tabs[tabIndex].copyWith(
-      title: title,
-      url: url,
-      status: status,
+      title: title ?? state.tabs[tabIndex].title,
+      url: url ?? state.tabs[tabIndex].url,
+      status: status ?? state.tabs[tabIndex].status,
       favicon: favicon,
       lastAccessed: DateTime.now(),
     );
