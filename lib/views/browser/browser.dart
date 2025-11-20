@@ -27,7 +27,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     super.initState();
     // 创建初始标签页
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(browserTabsNotifierProvider.notifier).createNewTab(url: 'https://www.google.com');
+      ref.read(browserTabsNotifier.notifier).createNewTab(url: 'https://www.google.com');
     });
   }
 
@@ -42,60 +42,69 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       _controllers[tabId] = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
         ..setNavigationDelegate(
-          (NavigationRequest request) async {
-            debugPrint('Navigating to: ${request.url}');
-            
-            // 检查是否是下载链接
-            if (_isDownloadLink(request.url)) {
-              _handleDownload(request.url);
-              return NavigationDecision.prevent;
-            }
-            
-            return NavigationDecision.navigate;
-          },
-        )
-        ..setOnPageStarted((String url) {
-          debugPrint('Page started loading: $url');
-          setState(() {
-            _loadingProgress[tabId] = 0;
-          });
-          ref.read(browserTabsNotifierProvider.notifier).updateTab(
-            tabId,
-            url: url,
-            status: BrowserTabStatus.loading,
-          );
-        })
-        ..setOnPageFinished((String url) async {
-          debugPrint('Page finished loading: $url');
-          setState(() {
-            _loadingProgress[tabId] = 100;
-          });
-          
-          final title = await _controllers[tabId]?.getTitle();
-          if (title != null) {
-            setState(() {
-              _currentTitles[tabId] = title;
-            });
-            ref.read(browserTabsNotifierProvider.notifier).updateTab(
-              tabId,
-              title: title,
-              url: url,
-              status: BrowserTabStatus.loaded,
-            );
-          }
-          
-          final canGoBack = await _controllers[tabId]?.canGoBack() ?? false;
-          final canGoForward = await _controllers[tabId]?.canGoForward() ?? false;
-          setState(() {
-            _canGoBack[tabId] = canGoBack;
-            _canGoForward[tabId] = canGoForward;
-          });
-        })
-        ..onProgress((int progress) {
-          setState(() {
-            _loadingProgress[tabId] = progress;
-          });
-        });
+          NavigationDelegate(
+            onProgress: (int progress) {
+              setState(() {
+                _loadingProgress[tabId] = progress;
+              });
+            },
+            onPageStarted: (String url) {
+              debugPrint('Page started loading: $url');
+              setState(() {
+                _loadingProgress[tabId] = 0;
+              });
+              ref.read(browserTabsNotifier.notifier).updateTab(
+                tabId,
+                url: url,
+                status: BrowserTabStatus.loading,
+              );
+            },
+            onPageFinished: (String url) async {
+              debugPrint('Page finished loading: $url');
+              setState(() {
+                _loadingProgress[tabId] = 100;
+              });
+              
+              final title = await _controllers[tabId]?.getTitle();
+              if (title != null) {
+                setState(() {
+                  _currentTitles[tabId] = title;
+                });
+                ref.read(browserTabsNotifier.notifier).updateTab(
+                  tabId,
+                  title: title,
+                  url: url,
+                  status: BrowserTabStatus.loaded,
+                );
+              }
+              
+              final canGoBack = await _controllers[tabId]?.canGoBack() ?? false;
+              final canGoForward = await _controllers[tabId]?.canGoForward() ?? false;
+              setState(() {
+                _canGoBack[tabId] = canGoBack;
+                _canGoForward[tabId] = canGoForward;
+              });
+            },
+            onWebResourceError: (WebResourceError error) {
+              debugPrint('Web resource error: ${error.description}');
+              ref.read(browserTabsNotifier.notifier).updateTab(
+                tabId,
+                status: BrowserTabStatus.error,
+              );
+            },
+            onNavigationRequest: (NavigationRequest request) {
+              debugPrint('Navigating to: ${request.url}');
+              
+              // 检查是否是下载链接
+              if (_isDownloadLink(request.url)) {
+                _handleDownload(request.url);
+                return NavigationDecision.prevent;
+              }
+              
+              return NavigationDecision.navigate;
+            },
+          ),
+        );
     }
     return _controllers[tabId]!;
   }
