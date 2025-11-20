@@ -4,7 +4,7 @@ part 'generated/download.freezed.dart';
 part 'generated/download.g.dart';
 
 @freezed
-class DownloadItem with _$DownloadItem {
+abstract class DownloadItem with _$DownloadItem {
   const factory DownloadItem({
     required String id,
     required String url,
@@ -77,7 +77,7 @@ enum DownloadStatus {
 }
 
 @freezed
-class DownloadsState with _$DownloadsState {
+abstract class DownloadsState with _$DownloadsState {
   const factory DownloadsState({
     @Default([]) List<DownloadItem> downloads,
     @Default(false) bool isLoading,

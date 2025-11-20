@@ -4,7 +4,7 @@ part 'generated/browser_tab.freezed.dart';
 part 'generated/browser_tab.g.dart';
 
 @freezed
-class BrowserTab with _$BrowserTab {
+abstract class BrowserTab with _$BrowserTab {
   const factory BrowserTab({
     required String id,
     required String title,
@@ -43,7 +43,7 @@ enum BrowserTabStatus {
 }
 
 @freezed
-class BrowserTabsState with _$BrowserTabsState {
+abstract class BrowserTabsState with _$BrowserTabsState {
   const factory BrowserTabsState({
     @Default([]) List<BrowserTab> tabs,
     String? activeTabId,
