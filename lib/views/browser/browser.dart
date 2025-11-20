@@ -543,12 +543,12 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     final proxyState = ref.read(proxyStateProvider);
     
     if (proxyState.isStart && proxyState.systemProxy) {
-      final port = proxyState.port;
+      final port = 7890; // 强制使用7890端口
       final host = proxyState.bassDomain.isEmpty ? '127.0.0.1' : proxyState.bassDomain;
       
       debugPrint('Configuring WebView proxy: $host:$port');
       
-      // 设置WebView代理的关键步骤
+      // 设置WebView代理的关键步骤 - 强制使用7890端口
       if (Platform.isAndroid) {
         // Android平台代理配置
         controller.runJavaScript("""
@@ -582,7 +582,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
           })();
         """);
       } else {
-        // 桌面平台的代理配置
+        // 桌面平台的代理配置 - 强制使用7890端口
         debugPrint('Desktop WebView proxy configuration: $host:$port');
         controller.runJavaScript("""
           (function() {
