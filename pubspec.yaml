@@ -56,7 +56,6 @@ dependencies:
   material_color_utilities: ^0.11.1
   webview_flutter: ^4.4.2
   uuid: ^4.2.1
-  path_provider: ^2.1.0
   permission_handler: ^11.0.1
   flutter_js:
     git:
