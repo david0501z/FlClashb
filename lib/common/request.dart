@@ -23,7 +23,8 @@ class Request {
         final client = HttpClient();
         client.findProxy = (Uri uri) {
           client.userAgent = globalState.ua;
-          return FlClashHttpOverrides.handleFindProxy(uri);
+          // 强制使用7890端口代理
+          return 'PROXY 127.0.0.1:7890';
         };
         return client;
       },
