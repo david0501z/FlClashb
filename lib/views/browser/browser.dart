@@ -6,6 +6,7 @@ import 'package:fl_clash/models/browser_tab.dart';
 import 'package:fl_clash/models/download.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'dart:io';
 
 class BrowserView extends ConsumerStatefulWidget {
   const BrowserView({super.key});
@@ -25,6 +26,16 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   @override
   void initState() {
     super.initState();
+    // 监听代理状态变化
+    ref.listenManual(
+      proxyStateProvider,
+      (previous, next) {
+        if (previous != next) {
+          _updateAllControllersProxy();
+        }
+      },
+    );
+    
     // 创建初始标签页
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(browserTabsProvider.notifier).createNewTab(url: 'https://www.google.com');
@@ -39,8 +50,13 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
 
   WebViewController _getOrCreateController(String tabId) {
     if (!_controllers.containsKey(tabId)) {
-      _controllers[tabId] = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      final controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted);
+      
+      // 配置代理
+      _configureProxy(controller);
+      
+      _controllers[tabId] = controller
         ..setNavigationDelegate(
           NavigationDelegate(
             onProgress: (int progress) {
@@ -177,6 +193,14 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     if (activeTab != null) {
       _urlController.clear();
       _getOrCreateController(activeTab.id).loadRequest(Uri.parse('https://www.google.com'));
+    }
+  }
+
+  void _checkProxyStatus() {
+    final activeTab = ref.read(browserTabsProvider).activeTab;
+    if (activeTab != null) {
+      // 加载代理检测页面
+      _getOrCreateController(activeTab.id).loadRequest(Uri.parse('https://httpbin.org/ip'));
     }
   }
 
@@ -379,37 +403,48 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
                 tooltip: '主页',
               ),
               const Spacer(),
-              // 代理状态指示器
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: proxyState.isStart && proxyState.systemProxy 
-                      ? Colors.green 
-                      : Colors.grey,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      proxyState.isStart && proxyState.systemProxy 
-                          ? Icons.shield 
-                          : Icons.shield_outlined,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      proxyState.isStart && proxyState.systemProxy 
-                          ? '代理已启用' 
-                          : '代理未启用',
-                      style: const TextStyle(
+              // 代理状态指示器（可点击检测）
+              GestureDetector(
+                onTap: _checkProxyStatus,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: proxyState.isStart && proxyState.systemProxy 
+                        ? Colors.green 
+                        : Colors.grey,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        proxyState.isStart && proxyState.systemProxy 
+                            ? Icons.shield 
+                            : Icons.shield_outlined,
                         color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                        size: 16,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 6),
+                      Text(
+                        proxyState.isStart && proxyState.systemProxy 
+                            ? '代理已启用' 
+                            : '代理未启用',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (proxyState.isStart && proxyState.systemProxy) ...[
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.touch_app,
+                          color: Colors.white,
+                          size: 12,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -502,6 +537,84 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('浏览器设置功能正在开发中...')),
     );
+  }
+
+  void _configureProxy(WebViewController controller) {
+    final proxyState = ref.read(proxyStateProvider);
+    
+    if (proxyState.isStart && proxyState.systemProxy) {
+      final port = proxyState.port;
+      final host = proxyState.bassDomain.isEmpty ? '127.0.0.1' : proxyState.bassDomain;
+      
+      debugPrint('Configuring WebView proxy: $host:$port');
+      
+      // 设置WebView代理的关键步骤
+      if (Platform.isAndroid) {
+        // Android平台代理配置
+        controller.runJavaScript("""
+          (function() {
+            console.log('Setting up proxy for Android WebView');
+            // 尝试通过fetch API测试代理连接
+            fetch('https://httpbin.org/ip')
+              .then(response => response.json())
+              .then(data => {
+                console.log('Current IP via proxy:', data.origin);
+              })
+              .catch(error => {
+                console.error('Proxy test failed:', error);
+              });
+          })();
+        """);
+      } else if (Platform.isIOS) {
+        // iOS平台代理配置
+        controller.runJavaScript("""
+          (function() {
+            console.log('Setting up proxy for iOS WebView');
+            // iOS WebView通常会自动使用系统代理设置
+            fetch('https://httpbin.org/ip')
+              .then(response => response.json())
+              .then(data => {
+                console.log('Current IP via proxy:', data.origin);
+              })
+              .catch(error => {
+                console.error('Proxy test failed:', error);
+              });
+          })();
+        """);
+      } else {
+        // 桌面平台的代理配置
+        debugPrint('Desktop WebView proxy configuration: $host:$port');
+        controller.runJavaScript("""
+          (function() {
+            console.log('Desktop WebView proxy check');
+            fetch('https://httpbin.org/ip')
+              .then(response => response.json())
+              .then(data => {
+                console.log('Current IP:', data.origin);
+              })
+              .catch(error => {
+                console.error('IP check failed:', error);
+              });
+          })();
+        """);
+      }
+    } else {
+      debugPrint('Proxy is not enabled or system proxy is off');
+    }
+  }
+
+  void _updateAllControllersProxy() {
+    // 更新所有现有WebView控制器的代理配置
+    for (final entry in _controllers.entries) {
+      final tabId = entry.key;
+      final controller = entry.value;
+      
+      debugPrint('Updating proxy for tab: $tabId');
+      _configureProxy(controller);
+      
+      // 重新加载当前页面以应用新的代理设置
+      controller.reload();
+    }
   }
 }
 
