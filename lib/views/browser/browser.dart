@@ -563,30 +563,27 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
           console.log('Proxy configured via PAC');
         })();
       """);
-      } else if (Platform.isIOS) {
-        // iOS WebView代理配置
-        controller.runJavaScript("""
-          (function() {
-            console.log('Setting proxy to 127.0.0.1:7890 on iOS');
-            // iOS也尝试通过PAC设置
-            var pacScript = 'function FindProxyForURL(url, host) { return "SOCKS5 127.0.0.1:7890"; }';
-            console.log('iOS proxy configured');
-          })();
-        """);
-      } else {
-        // 桌面平台代理配置
-        debugPrint('Desktop WebView proxy configuration: $host:$port');
-        controller.runJavaScript("""
-          (function() {
-            console.log('Setting desktop proxy to 127.0.0.1:7890');
-            // 桌面版WebView代理设置
-            var pacScript = 'function FindProxyForURL(url, host) { return "SOCKS5 127.0.0.1:7890"; }';
-            console.log('Desktop proxy configured');
-          })();
-        """);
-      }
+    } else if (Platform.isIOS) {
+      // iOS WebView代理配置
+      controller.runJavaScript("""
+        (function() {
+          console.log('Setting proxy to 127.0.0.1:7890 on iOS');
+          // iOS也尝试通过PAC设置
+          var pacScript = 'function FindProxyForURL(url, host) { return "SOCKS5 127.0.0.1:7890"; }';
+          console.log('iOS proxy configured');
+        })();
+      """);
     } else {
-      debugPrint('Proxy is not enabled or system proxy is off');
+      // 桌面平台代理配置
+      debugPrint('Desktop WebView proxy configuration: $host:$port');
+      controller.runJavaScript("""
+        (function() {
+          console.log('Setting desktop proxy to 127.0.0.1:7890');
+          // 桌面版WebView代理设置
+          var pacScript = 'function FindProxyForURL(url, host) { return "SOCKS5 127.0.0.1:7890"; }';
+          console.log('Desktop proxy configured');
+        })();
+      """);
     }
   }
 
