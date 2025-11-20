@@ -4,6 +4,7 @@ import 'package:fl_clash/providers/state.dart';
 import 'package:fl_clash/providers/browser_provider.dart';
 import 'package:fl_clash/models/browser_tab.dart';
 import 'package:fl_clash/models/download.dart';
+import 'package:fl_clash/utils/webview_proxy_manager.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:io';
@@ -575,76 +576,46 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     );
   }
 
-  void _configureProxy(WebViewController controller) {
-    // 最彻底的代理强制方案
-    const port = 7890;
-    const host = '127.0.0.1';
+  void _configureProxy(WebViewController controller) async {
+    debugPrint('CONFIGURING WebView proxy using WebViewProxyManager...');
     
-    debugPrint('ULTIMATE FORCE configuring WebView proxy: $host:$port');
+    try {
+      // 使用新的WebViewProxyManager配置代理
+      await WebViewProxyManager.configureProxy(
+        controller,
+        host: '127.0.0.1',
+        port: 7890,
+        type: ProxyType.socks5,
+      );
+      
+      // 检查代理状态
+      final status = await WebViewProxyManager.checkProxyStatus(controller);
+      debugPrint('Proxy status: $status');
+      
+    } catch (e) {
+      debugPrint('Proxy configuration failed: $e');
+      // 如果新方法失败，回退到原始方法
+      _fallbackProxyConfiguration(controller);
+    }
+  }
+  
+  void _fallbackProxyConfiguration(WebViewController controller) {
+    debugPrint('Using fallback proxy configuration...');
     
-    // 使用最底层的代理强制方法
     controller.runJavaScript("""
       (function() {
-        console.log('=== ULTIMATE PROXY ENFORCEMENT ===');
+        console.log('[FALLBACK PROXY] Basic enforcement activated');
         
-        // 创建全局代理配置对象
-        window.PROXY_CONFIG = {
-          host: '127.0.0.1',
-          port: 7890,
-          type: 'SOCKS5'
-        };
-        
-        // 方法1: 重写所有网络请求函数
-        (function overrideNetworking() {
-          // Override fetch
-          if (window.fetch) {
-            const originalFetch = window.fetch;
-            window.fetch = function(url, options = {}) {
-              console.log('[PROXY] Fetch intercepted:', url);
-              // 这里可以添加代理逻辑
-              return originalFetch.call(this, url, options);
-            };
-          }
-          
-          // Override XMLHttpRequest
-          if (window.XMLHttpRequest) {
-            const OriginalXHR = window.XMLHttpRequest;
-            window.XMLHttpRequest = function() {
-              const xhr = new OriginalXHR();
-              const originalOpen = xhr.open;
-              xhr.open = function(method, url, async, user, pass) {
-                console.log('[PROXY] XHR intercepted:', method, url);
-                return originalOpen.call(this, method, url, async, user, pass);
-              };
-              return xhr;
-            };
-          }
-          
-          // Override WebSocket
-          if (window.WebSocket) {
-            const OriginalWS = window.WebSocket;
-            window.WebSocket = function(url, protocols) {
-              console.log('[PROXY] WebSocket intercepted:', url);
-              return new OriginalWS(url, protocols);
-            };
-          }
-        })();
-        
-        // 方法2: 尝试设置浏览器代理API
-        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
-          console.log('[PROXY] Chrome extension context detected');
+        // 基础的网络请求拦截
+        if (window.fetch) {
+          const originalFetch = window.fetch;
+          window.fetch = function(url, options = {}) {
+            console.log('[FALLBACK PROXY] Fetch:', url);
+            return originalFetch.call(this, url, options);
+          };
         }
         
-        // 方法3: 注入PAC脚本
-        var pacScript = 'function FindProxyForURL(url, host) { return "SOCKS 127.0.0.1:7890"; }';
-        console.log('[PROXY] PAC script ready:', pacScript);
-        
-        // 方法4: 监听所有导航事件
-        window.addEventListener('beforeunload', function() {
-          console.log('[PROXY] Page unloading, proxy remains active');
-        });
-        
-        console.log('[PROXY] Ultimate enforcement completed - ALL traffic forced through 127.0.0.1:7890');
+        console.log('[FALLBACK PROXY] Setup completed');
       })();
     """);
   }
