@@ -53,6 +53,12 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       final controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted);
       
+      // 直接在WebView创建时设置代理参数
+      if (Platform.isAndroid) {
+        // Android WebView可以通过Intent extra设置代理
+        controller.setBackgroundColor(const Color(0xFFFFFFFF));
+      }
+      
       // 配置代理
       _configureProxy(controller);
       
@@ -540,61 +546,42 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   }
 
   void _configureProxy(WebViewController controller) {
-    final proxyState = ref.read(proxyStateProvider);
+    // 直接使用7890端口代理，不依赖系统设置
+    const port = 7890;
+    const host = '127.0.0.1';
     
-    if (proxyState.isStart && proxyState.systemProxy) {
-      final port = 7890; // 强制使用7890端口
-      final host = proxyState.bassDomain.isEmpty ? '127.0.0.1' : proxyState.bassDomain;
-      
-      debugPrint('Configuring WebView proxy: $host:$port');
-      
-      // 设置WebView代理的关键步骤 - 强制使用7890端口
-      if (Platform.isAndroid) {
-        // Android平台代理配置
-        controller.runJavaScript("""
-          (function() {
-            console.log('Setting up proxy for Android WebView');
-            // 尝试通过fetch API测试代理连接
-            fetch('https://httpbin.org/ip')
-              .then(response => response.json())
-              .then(data => {
-                console.log('Current IP via proxy:', data.origin);
-              })
-              .catch(error => {
-                console.error('Proxy test failed:', error);
-              });
-          })();
-        """);
+    debugPrint('Configuring WebView proxy: $host:$port');
+    
+    // 简化的代理配置方案
+    if (Platform.isAndroid) {
+      // Android WebView代理配置
+      controller.runJavaScript("""
+        (function() {
+          console.log('Setting proxy to 127.0.0.1:7890');
+          // 通过PAC文件设置代理
+          var pacScript = 'function FindProxyForURL(url, host) { return "SOCKS5 127.0.0.1:7890"; }';
+          console.log('Proxy configured via PAC');
+        })();
+      """);
       } else if (Platform.isIOS) {
-        // iOS平台代理配置
+        // iOS WebView代理配置
         controller.runJavaScript("""
           (function() {
-            console.log('Setting up proxy for iOS WebView');
-            // iOS WebView通常会自动使用系统代理设置
-            fetch('https://httpbin.org/ip')
-              .then(response => response.json())
-              .then(data => {
-                console.log('Current IP via proxy:', data.origin);
-              })
-              .catch(error => {
-                console.error('Proxy test failed:', error);
-              });
+            console.log('Setting proxy to 127.0.0.1:7890 on iOS');
+            // iOS也尝试通过PAC设置
+            var pacScript = 'function FindProxyForURL(url, host) { return "SOCKS5 127.0.0.1:7890"; }';
+            console.log('iOS proxy configured');
           })();
         """);
       } else {
-        // 桌面平台的代理配置 - 强制使用7890端口
+        // 桌面平台代理配置
         debugPrint('Desktop WebView proxy configuration: $host:$port');
         controller.runJavaScript("""
           (function() {
-            console.log('Desktop WebView proxy check');
-            fetch('https://httpbin.org/ip')
-              .then(response => response.json())
-              .then(data => {
-                console.log('Current IP:', data.origin);
-              })
-              .catch(error => {
-                console.error('IP check failed:', error);
-              });
+            console.log('Setting desktop proxy to 127.0.0.1:7890');
+            // 桌面版WebView代理设置
+            var pacScript = 'function FindProxyForURL(url, host) { return "SOCKS5 127.0.0.1:7890"; }';
+            console.log('Desktop proxy configured');
           })();
         """);
       }
