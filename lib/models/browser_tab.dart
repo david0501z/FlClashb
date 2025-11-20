@@ -12,7 +12,7 @@ class BrowserTab with _$BrowserTab {
     @Default(BrowserTabStatus.loading) BrowserTabStatus status,
     int? favicon,
     DateTime? lastAccessed,
-    bool isSelected = false,
+    @Default(false) bool isSelected,
   }) = _BrowserTab;
 
   factory BrowserTab.fromJson(Map<String, Object?> json) =>
