@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 class WebViewProxyManager {
-  static const MethodChannel _channel = MethodChannel('webview_proxy');
+  static const MethodChannel _channel = MethodChannel('com.follow.clash/webview_proxy');
   static bool _initialized = false;
 
   /// 初始化WebView代理管理器
@@ -26,27 +26,58 @@ class WebViewProxyManager {
     WebViewController controller, {
     String host = '127.0.0.1',
     int port = 7890,
-    ProxyType type = ProxyType.socks5,
+    ProxyType type = ProxyType.http, // 默认使用HTTP代理，因为SOCKS5在WebView中不直接支持
   }) async {
     await initialize();
 
     try {
-      // 方法1: 直接设置WebView代理参数
-      await _setWebViewProxy(controller, host, port, type);
+      // 调用原生方法设置WebView代理
+      final success = await _setNativeWebViewProxy(host, port);
       
-      // 方法2: 注入强化版代理JavaScript
-      await _injectEnhancedProxyScript(controller, host, port, type);
-      
-      // 方法3: 设置网络请求拦截
-      await _setupRequestInterception(controller, host, port, type);
-      
-      debugPrint('[WebViewProxy] Proxy configured: $host:$port (${type.name})');
+      if (success) {
+        debugPrint('[WebViewProxy] Native proxy configured successfully: $host:$port (${type.name})');
+      } else {
+        debugPrint('[WebViewProxy] Native proxy configuration failed, falling back to JavaScript methods');
+        // 如果原生方法失败，回退到JavaScript方法
+        await _setWebViewProxy(controller, host, port, type);
+        await _injectEnhancedProxyScript(controller, host, port, type);
+        await _setupRequestInterception(controller, host, port, type);
+      }
     } catch (e) {
       debugPrint('[WebViewProxy] Configuration failed: $e');
+      // 出错时也回退到JavaScript方法
+      await _setWebViewProxy(controller, host, port, type);
+      await _injectEnhancedProxyScript(controller, host, port, type);
+      await _setupRequestInterception(controller, host, port, type);
     }
   }
 
-  /// 设置WebView原生代理
+  /// 设置原生WebView代理
+  static Future<bool> _setNativeWebViewProxy(String host, int port) async {
+    try {
+      final result = await _channel.invokeMethod('setProxy', {
+        'host': host,
+        'port': port,
+      });
+      return result == true;
+    } catch (e) {
+      debugPrint('[WebViewProxy] Native proxy configuration error: $e');
+      return false;
+    }
+  }
+
+  /// 清除原生WebView代理
+  static Future<bool> clearProxyNative() async {
+    try {
+      final result = await _channel.invokeMethod('clearProxy');
+      return result == true;
+    } catch (e) {
+      debugPrint('[WebViewProxy] Native proxy clear error: $e');
+      return false;
+    }
+  }
+
+  /// 设置WebView代理（JavaScript方法，作为回退）
   static Future<void> _setWebViewProxy(
     WebViewController controller,
     String host,
@@ -250,6 +281,10 @@ class WebViewProxyManager {
   /// 清除代理设置
   static Future<void> clearProxy(WebViewController controller) async {
     try {
+      // 首先尝试清除原生代理
+      await clearProxyNative();
+      
+      // 然后清除JavaScript代理设置
       await controller.runJavaScript("""
         (function() {
           window.PROXY_ENFORCED = false;
