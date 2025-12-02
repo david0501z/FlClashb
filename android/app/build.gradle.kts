@@ -105,4 +105,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics.ndk)
     implementation(libs.firebase.analytics)
+    
+    // 添加 WebView 代理支持依赖
+    implementation("androidx.webkit:webkit:1.12.1")
 }
