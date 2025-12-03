@@ -1,5 +1,7 @@
 // ignore_for_file: avoid_print
 
+import 'package:flutter/services.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -289,6 +291,16 @@ class Build {
     return command.split(' ');
   }
 
+  static Future<void> registerWebViewProxyPlugin() async {
+    await Build.exec(
+      Build.getExecutable('flutter pub add webview_flutter')
+
+  static Future<void> registerWebViewProxyPlugin() async {
+    await Build.exec(
+      Build.getExecutable('flutter pub add webview_flutter'),
+    );
+  }
+
   static Future<void> getDistributor() async {
     final distributorDir = join(
       current,
@@ -308,10 +320,9 @@ class Build {
       Build.getExecutable('flutter pub upgrade'),
       workingDirectory: distributorDir,
     );
-    await exec(
-      name: 'get distributor',
-      Build.getExecutable('dart pub global activate -s path $distributorDir'),
-    );
+    
+    // 注册 WebView 代理插件
+    await registerWebViewProxyPlugin();
   }
 
   static void copyFile(String sourceFilePath, String destinationFilePath) {
