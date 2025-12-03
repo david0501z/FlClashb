@@ -27,6 +27,10 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   @override
   void initState() {
     super.initState();
+    
+    // 初始化 WebView 代理管理器
+    _initializeWebViewProxy();
+    
     // 监听代理状态变化
     ref.listenManual(
       proxyStateProvider,
@@ -41,6 +45,17 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(browserTabsProvider.notifier).createNewTab(url: 'https://www.google.com');
     });
+  }
+
+  // 初始化 WebView 代理管理器
+  Future<void> _initializeWebViewProxy() async {
+    try {
+      debugPrint('Initializing WebView proxy manager...');
+      await WebViewProxyManager.initialize();
+      debugPrint('WebView proxy manager initialized successfully');
+    } catch (e) {
+      debugPrint('Failed to initialize WebView proxy manager: $e');
+    }
   }
 
   @override
@@ -585,7 +600,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
         controller,
         host: '127.0.0.1',
         port: 7890,
-        type: ProxyType.socks5,
+        type: ProxyType.http, // 改为 HTTP 代理，因为 WebView 更好支持
       );
       
       // 检查代理状态
