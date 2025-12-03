@@ -28,7 +28,7 @@ class MainActivity : FlutterActivity(),
         flutterEngine.plugins.add(AppPlugin())
         flutterEngine.plugins.add(ServicePlugin())
         flutterEngine.plugins.add(TilePlugin())
-        flutterEngine.plugins.add(plugins.WebViewProxyPlugin())
+        flutterEngine.plugins.add(WebViewProxyPlugin())
         State.flutterEngine = flutterEngine
     }
 
