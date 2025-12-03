@@ -89,8 +89,8 @@ jobs:
 
       - name: Setup
         run: |
-          #dart setup.dart ${{ matrix.platform }} ${{ matrix.arch && format('--arch {0}', matrix.arch) }} ${{ env.IS_STABLE == 'true' && '--env stable' || '' }}
-          flutter build apk --debug --verbose
+          dart setup.dart ${{ matrix.platform }} ${{ matrix.arch && format('--arch {0}', matrix.arch) }} ${{ env.IS_STABLE == 'true' && '--env stable' || '' }}
+          #flutter build apk --debug --verbose
       
       - name: up
         if: true
