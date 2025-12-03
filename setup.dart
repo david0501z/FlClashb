@@ -293,6 +293,20 @@ class Build {
     await Build.exec(
       Build.getExecutable('flutter pub add webview_flutter'),
     );
+    
+    // 确保 WebView 代理插件已正确注册
+    await Build.exec(
+      name: 'register proxy plugin',
+      Build.getExecutable('flutter pub add path_provider'),
+    );
+    
+    // 在 Android 上注册 WebView 代理插件
+    if (Platform.isAndroid) {
+      await Build.exec(
+        name: 'configure android proxy',
+        Build.getExecutable('flutter pub add android_intent_plus'),
+      );
+    }
   }
 
   static Future<void> getDistributor() async {
