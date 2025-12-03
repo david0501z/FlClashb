@@ -117,7 +117,7 @@ class WebViewProxyPlugin : FlutterPlugin, MethodCallHandler {
             if (WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
                 // 恢复默认代理设置
                 androidx.webkit.ProxyController.getInstance()
-                    .clearProxyOverride {
+                    .clearProxyOverride(Executors.newSingleThreadExecutor()) {
                         Log.d(TAG, "Proxy override cleared")
                     }
                 
