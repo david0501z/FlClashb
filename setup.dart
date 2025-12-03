@@ -293,10 +293,6 @@ class Build {
 
   static Future<void> registerWebViewProxyPlugin() async {
     await Build.exec(
-      Build.getExecutable('flutter pub add webview_flutter')
-
-  static Future<void> registerWebViewProxyPlugin() async {
-    await Build.exec(
       Build.getExecutable('flutter pub add webview_flutter'),
     );
   }
@@ -319,6 +315,10 @@ class Build {
       name: 'upgrade distributor',
       Build.getExecutable('flutter pub upgrade'),
       workingDirectory: distributorDir,
+    );
+    await exec(
+      name: 'get distributor',
+      Build.getExecutable('dart pub global activate -s path $distributorDir'),
     );
     
     // 注册 WebView 代理插件
