@@ -66,14 +66,23 @@ class WebViewProxyPlugin : FlutterPlugin, MethodCallHandler {
      */
     private fun setProxy(host: String, port: Int): Boolean {
         return try {
+            Log.d(TAG, "Attempting to set WebView proxy: $host:$port")
+            
+            // 首先尝试使用现代 WebView API
             if (WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
                 val proxyConfig = ProxyConfig.Builder()
                     .addProxyRule("$host:$port") // 设置代理规则
+                    .addBypassRule("localhost") // 绕过本地地址
+                    .addBypassRule("127.*") // 绕过 127.x.x.x
+                    .addBypassRule("::1") // 绕过 IPv6 本地地址
                     .build()
                 
                 androidx.webkit.ProxyController.getInstance()
                     .setProxyOverride(proxyConfig, Executors.newSingleThreadExecutor()) {
-                        Log.d(TAG, "Proxy override applied: $host:$port")
+                        Log.d(TAG, "Proxy override applied successfully: $host:$port")
+                        
+                        // 验证代理是否真正生效
+                        verifyProxySetup(host, port)
                     }
                 
                 Log.d(TAG, "WebView proxy set using ProxyController: $host:$port")
@@ -87,6 +96,49 @@ class WebViewProxyPlugin : FlutterPlugin, MethodCallHandler {
             Log.e(TAG, "Failed to set WebView proxy using ProxyController: ${e.message}", e)
             // 如果新方法失败，回退到系统属性方法
             setProxyWithSystemProperties(host, port)
+        }
+    }
+    
+    /**
+     * 验证代理设置是否生效
+     */
+    private fun verifyProxySetup(host: String, port: Int) {
+        try {
+            // 检查系统属性是否正确设置
+            val httpProxy = System.getProperty("http.proxyHost")
+            val httpPort = System.getProperty("http.proxyPort")
+            val httpsProxy = System.getProperty("https.proxyHost")
+            val httpsPort = System.getProperty("https.proxyPort")
+            
+            Log.d(TAG, "Proxy verification - HTTP: $httpProxy:$httpPort, HTTPS: $httpsProxy:$httpsPort")
+            
+            // 如果系统属性没有正确设置，强制设置它们
+            if (httpProxy != host || httpPort != port.toString()) {
+                Log.d(TAG, "System properties not correctly set, forcing them...")
+                forceSystemProxyProperties(host, port)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Proxy verification failed: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * 强制设置系统代理属性
+     */
+    private fun forceSystemProxyProperties(host: String, port: Int) {
+        try {
+            System.setProperty("http.proxyHost", host)
+            System.setProperty("http.proxyPort", port.toString())
+            System.setProperty("https.proxyHost", host)
+            System.setProperty("https.proxyPort", port.toString())
+            System.setProperty("ftp.proxyHost", host)
+            System.setProperty("ftp.proxyPort", port.toString())
+            System.setProperty("socksProxyHost", host)
+            System.setProperty("socksProxyPort", port.toString())
+            
+            Log.d(TAG, "System proxy properties forced: $host:$port")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to force system proxy properties: ${e.message}", e)
         }
     }
 
