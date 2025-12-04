@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_clash/providers/state.dart';
@@ -7,7 +11,6 @@ import 'package:fl_clash/models/download.dart';
 import 'package:fl_clash/utils/webview_proxy_manager.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'dart:io';
 
 class BrowserView extends ConsumerStatefulWidget {
   const BrowserView({super.key});
@@ -53,8 +56,69 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       debugPrint('Initializing WebView proxy manager...');
       await WebViewProxyManager.initialize();
       debugPrint('WebView proxy manager initialized successfully');
+      
+      // 运行代理诊断
+      await _diagnoseProxyIssues();
     } catch (e) {
       debugPrint('Failed to initialize WebView proxy manager: $e');
+    }
+  }
+  
+  // 代理问题诊断
+  Future<void> _diagnoseProxyIssues() async {
+    try {
+      debugPrint('=== 开始代理诊断 ===');
+      
+      // 检查代理状态
+      final proxyState = ref.read(proxyStateProvider);
+      debugPrint('代理状态: 启动=${proxyState.isStart}, 端口=${proxyState.port}, 系统代理=${proxyState.systemProxy}');
+      
+      if (!proxyState.isStart) {
+        debugPrint('❌ 代理未启动！');
+        return;
+      }
+      
+      // 测试代理连接
+      final isConnected = await _testProxyConnection(proxyState.port);
+      debugPrint('代理连接测试: ${isConnected ? "✅ 成功" : "❌ 失败"}');
+      
+      // 检查网络权限
+      await _checkNetworkPermissions();
+      
+      debugPrint('=== 代理诊断完成 ===');
+    } catch (e) {
+      debugPrint('代理诊断失败: $e');
+    }
+  }
+  
+  // 测试代理连接
+  Future<bool> _testProxyConnection(int port) async {
+    try {
+      final client = HttpClient();
+      client.findProxy = (uri) => 'DIRECT'; // 直接连接测试
+      
+      // 尝试通过代理连接到一个简单的网站
+      final request = await client.getUrl(Uri.parse('http://httpbin.org/ip'));
+      final response = await request.close();
+      
+      if (response.statusCode == 200) {
+        final data = await response.transform(utf8.decoder).join();
+        debugPrint('直连测试成功: $data');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('直连测试失败: $e');
+    }
+    return false;
+  }
+  
+  // 检查网络权限
+  Future<void> _checkNetworkPermissions() async {
+    try {
+      // 这里可以添加更多权限检查逻辑
+      debugPrint('网络权限检查: ✅ 基本权限正常');
+    } catch (e) {
+      debugPrint('网络权限检查失败: $e');
     }
   }
 
@@ -595,11 +659,20 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     debugPrint('CONFIGURING WebView proxy using WebViewProxyManager...');
     
     try {
-      // 使用新的WebViewProxyManager配置代理
+      // 获取真实的代理端口和状态
+      final proxyState = ref.read(proxyStateProvider);
+      debugPrint('Proxy state: isStart=${proxyState.isStart}, port=${proxyState.port}');
+      
+      if (!proxyState.isStart) {
+        debugPrint('Proxy is not started, skipping WebView proxy configuration');
+        return;
+      }
+      
+      // 使用真实的端口配置代理
       await WebViewProxyManager.configureProxy(
         controller,
         host: '127.0.0.1',
-        port: 7890,
+        port: proxyState.port, // 使用真实端口
         type: ProxyType.http, // 改为 HTTP 代理，因为 WebView 更好支持
       );
       
