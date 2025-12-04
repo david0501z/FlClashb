@@ -11,6 +11,7 @@ import 'package:fl_clash/models/download.dart';
 import 'package:fl_clash/utils/webview_proxy_manager.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 
 class BrowserView extends ConsumerStatefulWidget {
   const BrowserView({super.key});
@@ -26,6 +27,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   final Map<String, bool> _canGoBack = {};
   final Map<String, bool> _canGoForward = {};
   final Map<String, String> _currentTitles = {};
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
@@ -61,8 +63,10 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       await _diagnoseProxyIssues();
     } catch (e) {
       debugPrint('Failed to initialize WebView proxy manager: $e');
-    }
-  }
+}
+
+
+	}
   
   // 代理问题诊断
   Future<void> _diagnoseProxyIssues() async {
@@ -88,8 +92,10 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       debugPrint('=== 代理诊断完成 ===');
     } catch (e) {
       debugPrint('代理诊断失败: $e');
-    }
-  }
+}
+
+
+	}
   
   // 测试代理连接
   Future<bool> _testProxyConnection(int port) async {
@@ -119,7 +125,36 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       debugPrint('网络权限检查: ✅ 基本权限正常');
     } catch (e) {
       debugPrint('网络权限检查失败: $e');
+}
+
+
+	}
+  
+  // 缩短标签页标题
+  String _shortenTabTitle(String title) {
+    if (title.length <= 8) {
+      return title;
     }
+    
+    // 移除常见的前缀
+    String shortened = title;
+    final prefixes = ['https://', 'http://', 'www.'];
+    for (final prefix in prefixes) {
+      if (shortened.startsWith(prefix)) {
+        shortened = shortened.substring(prefix.length);
+        break;
+      }
+    }
+
+
+	}
+    
+    // 如果还是太长，截断并添加省略号
+    if (shortened.length > 8) {
+      shortened = '${shortened.substring(0, 6)}..';
+    }
+    
+    return shortened;
   }
 
   @override
@@ -235,6 +270,38 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
               
               return NavigationDecision.navigate;
             },
+            // 添加下载回调处理
+            onDownloadStart: (String url) {
+              debugPrint('Download started: $url');
+              _handleDownload(url);
+            },
+            // 添加文件选择器支持
+            onFileSelector: (FileSelectorParams params) async {
+              debugPrint('File selector requested: ${params.acceptTypes}');
+              
+              try {
+                XFile? file;
+                
+                // 根据接受的文件类型决定选择方式
+                if (params.acceptTypes.contains('image/*')) {
+                  // 图片类型，优先使用相机或相册
+                  file = await _imagePicker.pickImage(
+                    source: ImageSource.gallery,
+                  );
+                } else {
+                  // 其他文件类型
+                  file = await _imagePicker.pickMedia();
+                }
+                
+                if (file != null) {
+                  return FileSelectorResult(file);
+                }
+              } catch (e) {
+                debugPrint('File selection error: $e');
+              }
+              
+              return null;
+            },
           ),
         );
     }
@@ -242,8 +309,26 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   }
 
   bool _isDownloadLink(String url) {
-    final downloadExtensions = ['.pdf', '.zip', '.rar', '.exe', '.dmg', '.pkg', '.deb', '.rpm', '.apk'];
-    return downloadExtensions.any((ext) => url.toLowerCase().endsWith(ext));
+    final downloadExtensions = [
+      '.pdf', '.zip', '.rar', '.exe', '.dmg', '.pkg', '.deb', '.rpm', '.apk',
+      '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv',
+      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.mp3', '.mp4',
+      '.avi', '.mov', '.wmv', '.flv', '.tar', '.gz', '.7z', '.iso'
+    ];
+    
+    // 检查文件扩展名
+    if (downloadExtensions.any((ext) => url.toLowerCase().endsWith(ext))) {
+      return true;
+    }
+    
+    // 检查常见的下载域名模式
+    final downloadPatterns = [
+      'download', 'attachment', 'file', 'media', 'cdn', 'assets',
+      '/dl/', '/files/', '/uploads/', '/static/'
+    ];
+    
+    final lowerUrl = url.toLowerCase();
+    return downloadPatterns.any((pattern) => lowerUrl.contains(pattern));
   }
 
   void _handleDownload(String url) {
@@ -262,11 +347,18 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
           url = 'https://$url';
         }
         _getOrCreateController(activeTab.id).loadRequest(Uri.parse(url));
-      }
-    }
-  }
+}
 
-  void _createNewTab() {
+
+	  }
+
+		}
+	  }
+
+
+	}
+	
+	  void _createNewTab() {
     ref.read(browserTabsProvider.notifier).createNewTab();
   }
 
@@ -290,35 +382,70 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     }
   }
 
+
+	}
+
   void _goForward() {
     final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null && (_canGoForward[activeTab.id] ?? false)) {
       _getOrCreateController(activeTab.id).goForward();
     }
   }
+	      
+	      // 显示上传进度提示
+	      ScaffoldMessenger.of(context).showSnackBar(
+	        SnackBar(
+		  content: Row(
+		    children: [
+		      const CircularProgressIndicator(),
+		      const SizedBox(width: 16),
+		      Text('正在上传 ${file.name.split('/').last}'),
+		    ],
+		  ),
+		  duration: const Duration(seconds: 2),
+		),
+	      );
+
+	      // 这里可以实现实际的文件上传逻辑
+	      // 例如：转换为 base64 并通过 JavaScript 注入到网页
+	      _uploadFileToWebView(controller, file);
+	    } else {
+	      ScaffoldMessenger.of(context).showSnackBar(
+	        const SnackBar(content: Text('请先打开一个网页')),
+	      );
+	    }
+	  }
+
+	}
 
   void _reload() {
     final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null) {
       _getOrCreateController(activeTab.id).reload();
-    }
-  }
+}
+
+
+	}
 
   void _goHome() {
     final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null) {
       _urlController.clear();
       _getOrCreateController(activeTab.id).loadRequest(Uri.parse('https://www.google.com'));
-    }
-  }
+}
+
+
+	}
 
   void _checkProxyStatus() {
     final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null) {
       // 加载代理检测页面
       _getOrCreateController(activeTab.id).loadRequest(Uri.parse('https://httpbin.org/ip'));
-    }
-  }
+}
+
+
+	}
 
   @override
   Widget build(BuildContext context) {
@@ -327,13 +454,14 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     final activeTab = tabsState.activeTab;
     
     return Scaffold(
-      body: Column(
-        children: [
-          // 标签栏
-          _buildTabBar(tabsState),
-          
-          // 地址栏和工具栏
-          _buildAddressBar(proxyState, activeTab),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 标签栏
+            _buildTabBar(tabsState),
+            
+            // 地址栏和工具栏
+            _buildAddressBar(proxyState, activeTab),
           
           // 进度条
           if (activeTab != null && (_loadingProgress[activeTab.id] ?? 0) < 100)
@@ -358,7 +486,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
 
   Widget _buildTabBar(BrowserTabsState tabsState) {
     return Container(
-      height: 48,
+      height: 40, // 减小高度
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(
@@ -415,16 +543,18 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Flexible(
+                  SizedBox(
+                    width: 80, // 限制最大宽度
                     child: Text(
-                      tab.displayName,
+                      _shortenTabTitle(tab.displayName),
                       style: TextStyle(
                         color: isActive 
                             ? Theme.of(context).colorScheme.onPrimaryContainer
                             : Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 12,
+                        fontSize: 11, // 稍微减小字体
                       ),
                       overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
                   if (tabsState.tabs.length > 1) ...[
@@ -451,7 +581,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
 
   Widget _buildAddressBar(proxyState, activeTab) {
     return Container(
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         boxShadow: [
@@ -478,11 +608,11 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
                       onPressed: () => _navigateToUrl(_urlController.text),
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(25),
+                      borderRadius: BorderRadius.circular(20),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+                      horizontal: 12,
+                      vertical: 8,
                     ),
                   ),
                   onSubmitted: _navigateToUrl,
@@ -490,7 +620,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           // 工具栏
           Row(
             children: [
@@ -571,6 +701,10 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
                     case 'downloads':
                       _showDownloads();
                       break;
+                    case 'download_current':
+                      _downloadCurrentPage();
+                      break;
+
                     case 'settings':
                       _showSettings();
                       break;
@@ -593,16 +727,26 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
-                    value: 'settings',
-                    child: Row(
+                  PopupMenuItem(
+                    value: 'download_current',
+                    child: const Row(
                       children: [
-                        Icon(Icons.settings),
+                        Icon(Icons.file_download),
                         SizedBox(width: 8),
-                        Text('设置'),
+                        Text('下载当前页面'),
                       ],
                     ),
-                  ),
+	                  ),
+	                  const PopupMenuItem(
+	                    value: 'settings',
+	                    child: Row(
+	                      children: [
+	                        Icon(Icons.settings),
+	                        SizedBox(width: 8),
+	                        Text('设置'),
+	                      ],
+	                    ),
+	                  ),
                 ],
               ),
             ],
@@ -649,9 +793,59 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     );
   }
 
+  void _downloadCurrentPage() {
+    final activeTab = ref.read(browserTabsProvider).activeTab;
+    if (activeTab != null) {
+      final controller = _getOrCreateController(activeTab.id);
+      
+      // 获取当前页面URL
+      controller.getCurrentUrl().then((url) {
+        if (url != null) {
+          // 显示下载对话框
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('下载页面'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('URL: $url'),
+                    const SizedBox(height: 16),
+                    const Text('选择下载选项:'),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('取消'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _handleDownload(url);
+                    },
+                    child: const Text('下载'),
+                  ),
+                ],
+              );
+            },
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法获取当前页面URL')),
+          );
+        }
+      });
+}
+
+
+	}
+
   void _showSettings() {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('浏览器设置功能正在开发中...')),
+      const SnackBar(content: Text('浏览器设置功能正在开发中...')),
     );
   }
 
@@ -684,8 +878,10 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       debugPrint('Proxy configuration failed: $e');
       // 如果新方法失败，回退到原始方法
       _fallbackProxyConfiguration(controller);
-    }
-  }
+}
+
+
+	}
   
   void _fallbackProxyConfiguration(WebViewController controller) {
     debugPrint('Using fallback proxy configuration...');
@@ -719,8 +915,12 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       
       // 重新加载当前页面以应用新的代理设置
       controller.reload();
-    }
-  }
+}
+
+
+	  }
+
+	}
 }
 
 class DownloadsPanel extends ConsumerWidget {
@@ -812,8 +1012,10 @@ class DownloadsPanel extends ConsumerWidget {
         ],
       ),
     );
-  }
 }
+
+
+	}
 
 class DownloadItemTile extends ConsumerWidget {
   final DownloadItem download;
@@ -944,8 +1146,10 @@ class DownloadItemTile extends ConsumerWidget {
         return Colors.orange;
       case DownloadStatus.cancelled:
         return Colors.grey;
-    }
-  }
+}
+
+
+	}
 
   IconData _getStatusIcon(DownloadStatus status) {
     switch (status) {
@@ -961,6 +1165,10 @@ class DownloadItemTile extends ConsumerWidget {
         return Icons.pause;
       case DownloadStatus.cancelled:
         return Icons.cancel;
-    }
-  }
+}
+
+
+	  }
+
+	}
 }
