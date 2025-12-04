@@ -63,10 +63,8 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       await _diagnoseProxyIssues();
     } catch (e) {
       debugPrint('Failed to initialize WebView proxy manager: $e');
-}
-
-
-	}
+    }
+  }
   
   // 代理问题诊断
   Future<void> _diagnoseProxyIssues() async {
@@ -92,10 +90,8 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       debugPrint('=== 代理诊断完成 ===');
     } catch (e) {
       debugPrint('代理诊断失败: $e');
-}
-
-
-	}
+    }
+  }
   
   // 测试代理连接
   Future<bool> _testProxyConnection(int port) async {
@@ -125,10 +121,8 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       debugPrint('网络权限检查: ✅ 基本权限正常');
     } catch (e) {
       debugPrint('网络权限检查失败: $e');
-}
-
-
-	}
+    }
+  }
   
   // 缩短标签页标题
   String _shortenTabTitle(String title) {
@@ -145,9 +139,6 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
         break;
       }
     }
-
-
-	}
     
     // 如果还是太长，截断并添加省略号
     if (shortened.length > 8) {
@@ -347,18 +338,11 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
           url = 'https://$url';
         }
         _getOrCreateController(activeTab.id).loadRequest(Uri.parse(url));
-}
+      }
+    }
+  }
 
-
-	  }
-
-		}
-	  }
-
-
-	}
-	
-	  void _createNewTab() {
+  void _createNewTab() {
     ref.read(browserTabsProvider.notifier).createNewTab();
   }
 
@@ -382,70 +366,35 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     }
   }
 
-
-	}
-
   void _goForward() {
     final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null && (_canGoForward[activeTab.id] ?? false)) {
       _getOrCreateController(activeTab.id).goForward();
     }
   }
-	      
-	      // 显示上传进度提示
-	      ScaffoldMessenger.of(context).showSnackBar(
-	        SnackBar(
-		  content: Row(
-		    children: [
-		      const CircularProgressIndicator(),
-		      const SizedBox(width: 16),
-		      Text('正在上传 ${file.name.split('/').last}'),
-		    ],
-		  ),
-		  duration: const Duration(seconds: 2),
-		),
-	      );
-
-	      // 这里可以实现实际的文件上传逻辑
-	      // 例如：转换为 base64 并通过 JavaScript 注入到网页
-	      _uploadFileToWebView(controller, file);
-	    } else {
-	      ScaffoldMessenger.of(context).showSnackBar(
-	        const SnackBar(content: Text('请先打开一个网页')),
-	      );
-	    }
-	  }
-
-	}
 
   void _reload() {
     final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null) {
       _getOrCreateController(activeTab.id).reload();
-}
-
-
-	}
+    }
+  }
 
   void _goHome() {
     final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null) {
       _urlController.clear();
       _getOrCreateController(activeTab.id).loadRequest(Uri.parse('https://www.google.com'));
-}
-
-
-	}
+    }
+  }
 
   void _checkProxyStatus() {
     final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null) {
       // 加载代理检测页面
       _getOrCreateController(activeTab.id).loadRequest(Uri.parse('https://httpbin.org/ip'));
-}
-
-
-	}
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -736,17 +685,17 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
                         Text('下载当前页面'),
                       ],
                     ),
-	                  ),
-	                  const PopupMenuItem(
-	                    value: 'settings',
-	                    child: Row(
-	                      children: [
-	                        Icon(Icons.settings),
-	                        SizedBox(width: 8),
-	                        Text('设置'),
-	                      ],
-	                    ),
-	                  ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'settings',
+                    child: Row(
+                      children: [
+                        Icon(Icons.settings),
+                        SizedBox(width: 8),
+                        Text('设置'),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -838,10 +787,8 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
           );
         }
       });
-}
-
-
-	}
+    }
+  }
 
   void _showSettings() {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -878,10 +825,8 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       debugPrint('Proxy configuration failed: $e');
       // 如果新方法失败，回退到原始方法
       _fallbackProxyConfiguration(controller);
-}
-
-
-	}
+    }
+  }
   
   void _fallbackProxyConfiguration(WebViewController controller) {
     debugPrint('Using fallback proxy configuration...');
@@ -915,12 +860,8 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       
       // 重新加载当前页面以应用新的代理设置
       controller.reload();
-}
-
-
-	  }
-
-	}
+    }
+  }
 }
 
 class DownloadsPanel extends ConsumerWidget {
@@ -1012,10 +953,8 @@ class DownloadsPanel extends ConsumerWidget {
         ],
       ),
     );
+  }
 }
-
-
-	}
 
 class DownloadItemTile extends ConsumerWidget {
   final DownloadItem download;
@@ -1146,10 +1085,8 @@ class DownloadItemTile extends ConsumerWidget {
         return Colors.orange;
       case DownloadStatus.cancelled:
         return Colors.grey;
-}
-
-
-	}
+    }
+  }
 
   IconData _getStatusIcon(DownloadStatus status) {
     switch (status) {
@@ -1165,10 +1102,6 @@ class DownloadItemTile extends ConsumerWidget {
         return Icons.pause;
       case DownloadStatus.cancelled:
         return Icons.cancel;
-}
-
-
-	  }
-
-	}
+    }
+  }
 }
