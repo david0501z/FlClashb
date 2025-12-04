@@ -30,25 +30,38 @@ class WebViewProxyManager {
   }) async {
     await initialize();
 
+    debugPrint('[WebViewProxy] Starting proxy configuration: $host:$port (${type.name})');
+
     try {
-      // 调用原生方法设置WebView代理
-      final success = await _setNativeWebViewProxy(host, port);
+      // 优先尝试原生方法设置WebView代理
+      final nativeSuccess = await _setNativeWebViewProxy(host, port);
       
-      if (success) {
+      if (nativeSuccess) {
         debugPrint('[WebViewProxy] Native proxy configured successfully: $host:$port (${type.name})');
       } else {
-        debugPrint('[WebViewProxy] Native proxy configuration failed, falling back to JavaScript methods');
-        // 如果原生方法失败，回退到JavaScript方法
-        await _setWebViewProxy(controller, host, port, type);
-        await _injectEnhancedProxyScript(controller, host, port, type);
-        await _setupRequestInterception(controller, host, port, type);
+        debugPrint('[WebViewProxy] Native proxy configuration failed, using JavaScript fallback');
       }
-    } catch (e) {
-      debugPrint('[WebViewProxy] Configuration failed: $e');
-      // 出错时也回退到JavaScript方法
+      
+      // 无论原生方法是否成功，都执行JavaScript层面的代理强化
+      debugPrint('[WebViewProxy] Applying JavaScript proxy enforcement...');
       await _setWebViewProxy(controller, host, port, type);
       await _injectEnhancedProxyScript(controller, host, port, type);
       await _setupRequestInterception(controller, host, port, type);
+      
+      // 额外的强制代理措施
+      await _forceProxySettings(controller, host, port, type);
+      
+      debugPrint('[WebViewProxy] Proxy configuration completed');
+      
+    } catch (e) {
+      debugPrint('[WebViewProxy] Configuration failed: $e');
+      // 出错时也尝试基本的JavaScript方法
+      try {
+        await _setWebViewProxy(controller, host, port, type);
+        await _injectBasicProxyScript(controller, host, port, type);
+      } catch (fallbackError) {
+        debugPrint('[WebViewProxy] Even fallback failed: $fallbackError');
+      }
     }
   }
 
@@ -276,6 +289,95 @@ class WebViewProxyManager {
       debugPrint('[WebViewProxy] Status check failed: $e');
       return {'error': e.toString()};
     }
+  }
+
+  /// 强制代理设置（额外措施）
+  static Future<void> _forceProxySettings(
+    WebViewController controller,
+    String host,
+    int port,
+    ProxyType type,
+  ) async {
+    await controller.runJavaScript("""
+      (function() {
+        console.log('[FORCE PROXY] Applying additional proxy measures...');
+        
+        // 强制覆盖所有可能的网络请求方法
+        const originalFetch = window.fetch;
+        const originalXHROpen = XMLHttpRequest.prototype.open;
+        const originalWebSocket = window.WebSocket;
+        
+        // 重写 fetch 以强制使用代理
+        window.fetch = function(url, options = {}) {
+          console.log('[FORCE PROXY] Fetch intercepted:', url);
+          
+          // 强制添加代理标识
+          options = options || {};
+          options.headers = options.headers || {};
+          options.headers['X-Force-Proxy'] = 'true';
+          options.headers['X-Proxy-Host'] = '$host:$port';
+          
+          return originalFetch.apply(this, arguments);
+        };
+        
+        // 重写 XMLHttpRequest
+        XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {
+          console.log('[FORCE PROXY] XHR intercepted:', method, url);
+          
+          // 设置代理头
+          this.setRequestHeader?.('X-Force-Proxy', 'true');
+          this.setRequestHeader?.('X-Proxy-Host', '$host:$port');
+          
+          return originalXHROpen.apply(this, arguments);
+        };
+        
+        // 重写 WebSocket
+        window.WebSocket = function(url, protocols) {
+          console.log('[FORCE PROXY] WebSocket intercepted:', url);
+          
+          // 创建带有代理信息的 WebSocket
+          const ws = new originalWebSocket(url, protocols);
+          ws._forceProxy = true;
+          
+          return ws;
+        };
+        
+        // 防止代理被绕过的额外措施
+        Object.freeze(window.fetch);
+        Object.freeze(XMLHttpRequest.prototype.open);
+        Object.freeze(window.WebSocket);
+        
+        console.log('[FORCE PROXY] Additional measures applied');
+      })();
+    """);
+  }
+
+  /// 基础代理脚本（简化版本，用于出错时的回退）
+  static Future<void> _injectBasicProxyScript(
+    WebViewController controller,
+    String host,
+    int port,
+    ProxyType type,
+  ) async {
+    final basicScript = '''
+      (function() {
+        console.log('[BASIC PROXY] Setting up minimal proxy enforcement...');
+        
+        // 基础 fetch 拦截
+        const originalFetch = window.fetch;
+        window.fetch = function(url, options = {}) {
+          console.log('[BASIC PROXY] Fetch:', url);
+          options = options || {};
+          options.headers = options.headers || {};
+          options.headers['X-Basic-Proxy'] = 'true';
+          return originalFetch.apply(this, arguments);
+        };
+        
+        console.log('[BASIC PROXY] Basic enforcement completed');
+      })();
+    ''';
+
+    await controller.runJavaScript(basicScript);
   }
 
   /// 清除代理设置
