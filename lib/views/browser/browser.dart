@@ -130,44 +130,47 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     }
   }
 
-  // 更新所有控制器的代理设置
   void _updateAllControllersProxy() {
-    for (final controller in _controllers.values) {
-      _updateControllerProxy(controller);
-    }
-  }
-
-  // 更新单个控制器的代理设置
-  void _updateControllerProxy(WebViewController controller) {
-    final proxyState = ref.read(proxyStateProvider);
-    if (proxyState.isStart && proxyState.systemProxy) {
-      debugPrint('Updating controller proxy settings: ${proxyState.host}:${proxyState.port}');
-      // 注意：webview_flutter 不支持直接设置代理
-      // 这里需要根据平台实现不同的代理设置方式
+    // 更新所有现有WebView控制器的代理配置
+    for (final entry in _controllers.entries) {
+      final tabId = entry.key;
+      final controller = entry.value;
+      
+      debugPrint('Updating proxy for tab: $tabId');
+      _configureProxy(controller);
+      
+      // 重新加载当前页面以应用新的代理设置
+      controller.reload();
     }
   }
 
   void _configureProxy(WebViewController controller) async {
     debugPrint('CONFIGURING WebView proxy using WebViewProxyManager...');
-
+    
     try {
       // 获取真实的代理端口和状态
       final proxyState = ref.read(proxyStateProvider);
+      debugPrint('Proxy state: isStart=${proxyState.isStart}, port=${proxyState.port}');
       
       if (!proxyState.isStart) {
-        debugPrint('Proxy is not enabled, skipping configuration');
+        debugPrint('Proxy is not started, skipping WebView proxy configuration');
         return;
       }
-
-      debugPrint('Setting up proxy for WebView: ${proxyState.host}:${proxyState.port}');
-
-      // 尝试使用 WebViewProxyManager 配置代理
-      await WebViewProxyManager.configureForWebView(controller, proxyState);
-
-      debugPrint('WebView proxy configuration completed successfully');
-    } catch (e) {
-      debugPrint('Failed to configure WebView proxy: $e');
       
+      // 使用真实的端口配置代理
+      await WebViewProxyManager.configureProxy(
+        controller,
+        host: '127.0.0.1',
+        port: proxyState.port, // 使用真实端口
+        type: ProxyType.http, // 改为 HTTP 代理，因为 WebView 更好支持
+      );
+      
+      // 检查代理状态
+      final status = await WebViewProxyManager.checkProxyStatus(controller);
+      debugPrint('Proxy status: $status');
+      
+    } catch (e) {
+      debugPrint('Proxy configuration failed: $e');
       // 如果新方法失败，回退到原始方法
       _fallbackProxyConfiguration(controller);
     }
@@ -193,8 +196,6 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       })();
     """);
   }
-
-  void _updateAllControllersProxy() {
     // 更新所有现有WebView控制器的代理配置
     for (final entry in _controllers.entries) {
       final tabId = entry.key;
@@ -208,11 +209,45 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     }
   }
 
-  // 获取或创建控制器
   WebViewController _getOrCreateController(String tabId) {
     if (!_controllers.containsKey(tabId)) {
       final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setJavaScriptMode(JavaScriptMode.unrestricted);
+      
+      // 最直接的代理设置方法 - 在WebView加载前设置
+      if (Platform.isAndroid) {
+        // Android WebView代理设置
+        controller.setBackgroundColor(const Color(0xFFFFFFFF));
+        // 设置Android WebView的系统属性
+        controller.runJavaScript("""
+          // 强制设置Android WebView代理
+          if (typeof navigator !== 'undefined') {
+            Object.defineProperty(navigator, 'proxy', {
+              value: '127.0.0.1:7890',
+              writable: false
+            });
+          }
+        """);
+      } else if (Platform.isIOS) {
+        // iOS WKWebView代理设置
+        controller.runJavaScript("""
+          // iOS WebView代理设置
+          if (typeof window.webkit !== 'undefined') {
+            console.log('Setting iOS proxy to 127.0.0.1:7890');
+          }
+        """);
+      } else {
+        // 桌面平台代理设置
+        controller.runJavaScript("""
+          // Desktop WebView代理设置
+          console.log('Desktop proxy: 127.0.0.1:7890');
+        """);
+      }
+      
+      // 配置代理
+      _configureProxy(controller);
+      
+      _controllers[tabId] = controller
         ..setNavigationDelegate(
           NavigationDelegate(
             onProgress: (int progress) {
@@ -223,47 +258,43 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
             onPageStarted: (String url) {
               setState(() {
                 _loadingProgress[tabId] = 0;
+                _currentUrls[tabId] = url;
               });
             },
             onPageFinished: (String url) async {
               setState(() {
                 _loadingProgress[tabId] = 100;
               });
-              
-              // 获取页面标题
-              final title = await controller.getTitle();
+
+              // 页面加载完成后再次强制设置代理
+              _configureProxy(controller);
+
+              final title = await _controllers[tabId]?.getTitle();
               if (title != null) {
                 setState(() {
                   _currentTitles[tabId] = title;
                 });
               }
-              
-              // 更新导航状态
-              final canGoBack = await controller.canGoBack();
-              final canGoForward = await controller.canGoForward();
-              setState(() {
-                _canGoBack[tabId] = canGoBack;
-                _canGoForward[tabId] = canGoForward;
-              });
             },
             onWebResourceError: (WebResourceError error) {
               debugPrint('WebView error: ${error.description}');
             },
             onNavigationRequest: (NavigationRequest request) {
+              debugPrint('Navigating to: ${request.url}');
+
+              // 导航前确保代理设置
+              _configureProxy(controller);
+
               // 检查是否是下载链接
               if (_isDownloadLink(request.url)) {
                 _handleDownload(request.url);
                 return NavigationDecision.prevent;
               }
-              
+
               return NavigationDecision.navigate;
             },
-            // onDownloadStart 和 onFileSelector 已在 webview_flutter 4.13.0 中移除
-            // 下载处理现在通过 onNavigationRequest 实现
           ),
         );
-
-      _controllers[tabId] = controller;
     }
     
     return _controllers[tabId]!;
@@ -292,18 +323,18 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     );
   }
 
-  void _loadUrl(String url) {
+void _loadUrl(String url) {
     final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null) {
       final controller = _getOrCreateController(activeTab.id);
-      
+
       // 确保 URL 格式正确
       String formattedUrl = url;
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
         formattedUrl = 'https://$url';
       }
-      
-      controller.loadUrl(formattedUrl);
+
+      controller.loadRequest(Uri.parse(formattedUrl));
     }
   }
 
@@ -470,7 +501,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     final activeTab = ref.read(browserTabsProvider).activeTab;
     if (activeTab != null) {
       final controller = _getOrCreateController(activeTab.id);
-      controller.loadUrl('https://www.google.com');
+      controller.loadRequest(Uri.parse('https://www.google.com'));
     }
   }
 
@@ -605,10 +636,10 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
                   ),
                 ),
                 
-                // WebView 内容
-                Expanded(
-                  child: _getOrCreateController(activeTab.id).buildWidget(),
-                ),
+// WebView 内容
+            Expanded(
+              child: WebViewWidget(controller: _getOrCreateController(activeTab.id)),
+            ),
               ],
             )
           : const Center(
