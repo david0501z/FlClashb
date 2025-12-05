@@ -430,7 +430,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
                   : const Center(child: Text('没有活动的标签页')),
             ),
         ],
-      ),
+      ),),
     );
   }
 
