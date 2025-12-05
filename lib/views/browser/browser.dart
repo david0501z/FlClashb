@@ -296,6 +296,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
           ),
         );
     }
+    
     return _controllers[tabId]!;
   }
 
@@ -411,29 +412,29 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
             
             // 地址栏和工具栏
             _buildAddressBar(proxyState, activeTab),
-          
-          // 进度条
-          if (activeTab != null && (_loadingProgress[activeTab.id] ?? 0) < 100)
-            LinearProgressIndicator(
-              value: (_loadingProgress[activeTab.id] ?? 0) / 100.0,
-              backgroundColor: Colors.grey[300],
-              valueColor: AlwaysStoppedAnimation<Color>(
-                Theme.of(context).primaryColor,
+            
+            // 进度条
+            if (activeTab != null && (_loadingProgress[activeTab.id] ?? 0) < 100)
+              LinearProgressIndicator(
+                value: (_loadingProgress[activeTab.id] ?? 0) / 100.0,
+                backgroundColor: Colors.grey[300],
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Theme.of(context).primaryColor,
+                ),
               ),
+            
+            // WebView 内容区域
+            Expanded(
+              child: activeTab != null
+                  ? WebViewWidget(controller: _getOrCreateController(activeTab.id))
+                  : const Center(child: Text('没有活动的标签页')),
             ),
-          
-          // WebView 内容区域
-          Expanded(
-            child: activeTab != null
-                ? WebViewWidget(controller: _getOrCreateController(activeTab.id))
-                : const Center(child: Text('没有活动的标签页')),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildTabBar(BrowserTabsState tabsState) {
+  Widget _buildTabBar(dynamic tabsState) {
     return Container(
       height: 40, // 减小高度
       decoration: BoxDecoration(
@@ -528,7 +529,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     );
   }
 
-  Widget _buildAddressBar(proxyState, activeTab) {
+  Widget _buildAddressBar(dynamic proxyState, dynamic activeTab) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       decoration: BoxDecoration(
