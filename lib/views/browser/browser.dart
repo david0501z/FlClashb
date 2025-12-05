@@ -261,38 +261,8 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
               
               return NavigationDecision.navigate;
             },
-            // 添加下载回调处理
-            onDownloadStart: (String url) {
-              debugPrint('Download started: $url');
-              _handleDownload(url);
-            },
-            // 添加文件选择器支持
-            onFileSelector: (FileSelectorParams params) async {
-              debugPrint('File selector requested: ${params.acceptTypes}');
-              
-              try {
-                XFile? file;
-                
-                // 根据接受的文件类型决定选择方式
-                if (params.acceptTypes.contains('image/*')) {
-                  // 图片类型，优先使用相机或相册
-                  file = await _imagePicker.pickImage(
-                    source: ImageSource.gallery,
-                  );
-                } else {
-                  // 其他文件类型
-                  file = await _imagePicker.pickMedia();
-                }
-                
-                if (file != null) {
-                  return FileSelectorResult(file);
-                }
-              } catch (e) {
-                debugPrint('File selection error: $e');
-              }
-              
-              return null;
-            },
+            // onDownloadStart 和 onFileSelector 已在 webview_flutter 4.13.0 中移除
+            // 下载处理现在通过 onNavigationRequest 实现
           ),
         );
     }
@@ -748,8 +718,8 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     if (activeTab != null) {
       final controller = _getOrCreateController(activeTab.id);
       
-      // 获取当前页面URL
-      controller.getCurrentUrl().then((url) {
+      // 获取当前页面URL - 使用正确的 API
+      controller.currentUrl().then((url) {
         if (url != null) {
           // 显示下载对话框
           showDialog(
