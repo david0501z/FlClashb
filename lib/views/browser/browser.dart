@@ -99,706 +99,80 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       final client = HttpClient();
       client.findProxy = (uri) => 'DIRECT'; // 直接连接测试
       
-      // 尝试通过代理连接到一个简单的网站
-      final request = await client.getUrl(Uri.parse('http://httpbin.org/ip'));
+      final request = await client.getUrl(Uri.parse('http://www.google.com'));
       final response = await request.close();
       
-      if (response.statusCode == 200) {
-        final data = await response.transform(utf8.decoder).join();
-        debugPrint('直连测试成功: $data');
-        return true;
-      }
+      client.close();
+      return response.statusCode == 200;
     } catch (e) {
-      debugPrint('直连测试失败: $e');
+      debugPrint('代理连接测试失败: $e');
+      return false;
     }
-    return false;
   }
   
   // 检查网络权限
   Future<void> _checkNetworkPermissions() async {
     try {
-      // 这里可以添加更多权限检查逻辑
-      debugPrint('网络权限检查: ✅ 基本权限正常');
+      final client = HttpClient();
+      final request = await client.getUrl(Uri.parse('https://httpbin.org/ip'));
+      final response = await request.close();
+      
+      if (response.statusCode == 200) {
+        final responseBody = await response.transform(utf8.decoder).join();
+        debugPrint('网络权限检查 ✅: $responseBody');
+      } else {
+        debugPrint('网络权限检查 ❌: HTTP ${response.statusCode}');
+      }
+      
+      client.close();
     } catch (e) {
       debugPrint('网络权限检查失败: $e');
     }
   }
-  
-  // 缩短标签页标题
-  String _shortenTabTitle(String title) {
-    if (title.length <= 8) {
-      return title;
-    }
-    
-    // 移除常见的前缀
-    String shortened = title;
-    final prefixes = ['https://', 'http://', 'www.'];
-    for (final prefix in prefixes) {
-      if (shortened.startsWith(prefix)) {
-        shortened = shortened.substring(prefix.length);
-        break;
-      }
-    }
-    
-    // 如果还是太长，截断并添加省略号
-    if (shortened.length > 8) {
-      shortened = '${shortened.substring(0, 6)}..';
-    }
-    
-    return shortened;
-  }
 
-  @override
-  void dispose() {
-    _urlController.dispose();
-    super.dispose();
-  }
-
-  WebViewController _getOrCreateController(String tabId) {
-    if (!_controllers.containsKey(tabId)) {
-      final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted);
-      
-      // 最直接的代理设置方法 - 在WebView加载前设置
-      if (Platform.isAndroid) {
-        // Android WebView代理设置
-        controller.setBackgroundColor(const Color(0xFFFFFFFF));
-        // 设置Android WebView的系统属性
-        controller.runJavaScript("""
-          // 强制设置Android WebView代理
-          if (typeof navigator !== 'undefined') {
-            Object.defineProperty(navigator, 'proxy', {
-              value: '127.0.0.1:7890',
-              writable: false
-            });
-          }
-        """);
-      } else if (Platform.isIOS) {
-        // iOS WKWebView代理设置
-        controller.runJavaScript("""
-          // iOS WebView代理设置
-          if (typeof window.webkit !== 'undefined') {
-            console.log('Setting iOS proxy to 127.0.0.1:7890');
-          }
-        """);
-      } else {
-        // 桌面平台代理设置
-        controller.runJavaScript("""
-          // Desktop WebView代理设置
-          console.log('Desktop proxy: 127.0.0.1:7890');
-        """);
-      }
-      
-      // 配置代理
-      _configureProxy(controller);
-      
-      _controllers[tabId] = controller
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onProgress: (int progress) {
-              setState(() {
-                _loadingProgress[tabId] = progress;
-              });
-            },
-            onPageStarted: (String url) {
-              debugPrint('Page started loading: $url');
-              setState(() {
-                _loadingProgress[tabId] = 0;
-              });
-              ref.read(browserTabsProvider.notifier).updateTab(
-                tabId,
-                url: url,
-                status: BrowserTabStatus.loading,
-              );
-            },
-            onPageFinished: (String url) async {
-              debugPrint('Page finished loading: $url');
-              setState(() {
-                _loadingProgress[tabId] = 100;
-              });
-              
-              // 页面加载完成后再次强制设置代理
-              _configureProxy(controller);
-              
-              final title = await _controllers[tabId]?.getTitle();
-              if (title != null) {
-                setState(() {
-                  _currentTitles[tabId] = title;
-                });
-                ref.read(browserTabsProvider.notifier).updateTab(
-                  tabId,
-                  title: title,
-                  url: url,
-                  status: BrowserTabStatus.loaded,
-                );
-              }
-              
-              final canGoBack = await _controllers[tabId]?.canGoBack() ?? false;
-              final canGoForward = await _controllers[tabId]?.canGoForward() ?? false;
-              setState(() {
-                _canGoBack[tabId] = canGoBack;
-                _canGoForward[tabId] = canGoForward;
-              });
-            },
-            onWebResourceError: (WebResourceError error) {
-              debugPrint('Web resource error: ${error.description}');
-              ref.read(browserTabsProvider.notifier).updateTab(
-                tabId,
-                status: BrowserTabStatus.error,
-              );
-            },
-            onNavigationRequest: (NavigationRequest request) {
-              debugPrint('Navigating to: ${request.url}');
-              
-              // 导航前确保代理设置
-              _configureProxy(controller);
-              
-              // 检查是否是下载链接
-              if (_isDownloadLink(request.url)) {
-                _handleDownload(request.url);
-                return NavigationDecision.prevent;
-              }
-              
-              return NavigationDecision.navigate;
-            },
-            // onDownloadStart 和 onFileSelector 已在 webview_flutter 4.13.0 中移除
-            // 下载处理现在通过 onNavigationRequest 实现
-          ),
-        );
-    }
-    
-    return _controllers[tabId]!;
-  }
-
-  bool _isDownloadLink(String url) {
-    final downloadExtensions = [
-      '.pdf', '.zip', '.rar', '.exe', '.dmg', '.pkg', '.deb', '.rpm', '.apk',
-      '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv',
-      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.mp3', '.mp4',
-      '.avi', '.mov', '.wmv', '.flv', '.tar', '.gz', '.7z', '.iso'
-    ];
-    
-    // 检查文件扩展名
-    if (downloadExtensions.any((ext) => url.toLowerCase().endsWith(ext))) {
-      return true;
-    }
-    
-    // 检查常见的下载域名模式
-    final downloadPatterns = [
-      'download', 'attachment', 'file', 'media', 'cdn', 'assets',
-      '/dl/', '/files/', '/uploads/', '/static/'
-    ];
-    
-    final lowerUrl = url.toLowerCase();
-    return downloadPatterns.any((pattern) => lowerUrl.contains(pattern));
-  }
-
-  void _handleDownload(String url) {
-    final fileName = url.split('/').last;
-    ref.read(downloadsProvider.notifier).startDownload(url, fileName: fileName);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('开始下载: $fileName')),
-    );
-  }
-
-  void _navigateToUrl(String url) {
-    if (url.isNotEmpty) {
-      final activeTab = ref.read(browserTabsProvider).activeTab;
-      if (activeTab != null) {
-        if (!url.startsWith('http://') && !url.startsWith('https://')) {
-          url = 'https://$url';
-        }
-        _getOrCreateController(activeTab.id).loadRequest(Uri.parse(url));
-      }
+  // 更新所有控制器的代理设置
+  void _updateAllControllersProxy() {
+    for (final controller in _controllers.values) {
+      _updateControllerProxy(controller);
     }
   }
 
-  void _createNewTab() {
-    ref.read(browserTabsProvider.notifier).createNewTab();
-  }
-
-  void _closeTab(String tabId) {
-    ref.read(browserTabsProvider.notifier).closeTab(tabId);
-    _controllers.remove(tabId);
-    _loadingProgress.remove(tabId);
-    _canGoBack.remove(tabId);
-    _canGoForward.remove(tabId);
-    _currentTitles.remove(tabId);
-  }
-
-  void _switchToTab(String tabId) {
-    ref.read(browserTabsProvider.notifier).setActiveTab(tabId);
-  }
-
-  void _goBack() {
-    final activeTab = ref.read(browserTabsProvider).activeTab;
-    if (activeTab != null && (_canGoBack[activeTab.id] ?? false)) {
-      _getOrCreateController(activeTab.id).goBack();
+  // 更新单个控制器的代理设置
+  void _updateControllerProxy(WebViewController controller) {
+    final proxyState = ref.read(proxyStateProvider);
+    if (proxyState.isStart && proxyState.systemProxy) {
+      debugPrint('Updating controller proxy settings: ${proxyState.host}:${proxyState.port}');
+      // 注意：webview_flutter 不支持直接设置代理
+      // 这里需要根据平台实现不同的代理设置方式
     }
-  }
-
-  void _goForward() {
-    final activeTab = ref.read(browserTabsProvider).activeTab;
-    if (activeTab != null && (_canGoForward[activeTab.id] ?? false)) {
-      _getOrCreateController(activeTab.id).goForward();
-    }
-  }
-
-  void _reload() {
-    final activeTab = ref.read(browserTabsProvider).activeTab;
-    if (activeTab != null) {
-      _getOrCreateController(activeTab.id).reload();
-    }
-  }
-
-  void _goHome() {
-    final activeTab = ref.read(browserTabsProvider).activeTab;
-    if (activeTab != null) {
-      _urlController.clear();
-      _getOrCreateController(activeTab.id).loadRequest(Uri.parse('https://www.google.com'));
-    }
-  }
-
-  void _checkProxyStatus() {
-    final activeTab = ref.read(browserTabsProvider).activeTab;
-    if (activeTab != null) {
-      // 加载代理检测页面
-      _getOrCreateController(activeTab.id).loadRequest(Uri.parse('https://httpbin.org/ip'));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final proxyState = ref.watch(proxyStateProvider);
-    final tabsState = ref.watch(browserTabsProvider);
-    final activeTab = tabsState.activeTab;
-    
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            // 标签栏
-            _buildTabBar(tabsState),
-            
-            // 地址栏和工具栏
-            _buildAddressBar(proxyState, activeTab),
-            
-            // 进度条
-            if (activeTab != null && (_loadingProgress[activeTab.id] ?? 0) < 100)
-              LinearProgressIndicator(
-                value: (_loadingProgress[activeTab.id] ?? 0) / 100.0,
-                backgroundColor: Colors.grey[300],
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  Theme.of(context).primaryColor,
-                ),
-              ),
-            
-            // WebView 内容区域
-            Expanded(
-              child: activeTab != null
-                  ? WebViewWidget(controller: _getOrCreateController(activeTab.id))
-                  : const Center(child: Text('没有活动的标签页')),
-            ),
-        ],
-      ),),
-    );
-  }
-
-  Widget _buildTabBar(dynamic tabsState) {
-    return Container(
-      height: 40, // 减小高度
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor,
-            width: 0.5,
-          ),
-        ),
-      ),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: tabsState.tabs.length + 1,
-        itemBuilder: (context, index) {
-          if (index == tabsState.tabs.length) {
-            // 新建标签页按钮
-            return InkWell(
-              onTap: _createNewTab,
-              child: Container(
-                width: 40,
-                margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceVariant,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.add,
-                  size: 20,
-                ),
-              ),
-            );
-          }
-
-          final tab = tabsState.tabs[index];
-          final isActive = tab.isSelected;
-          
-          return GestureDetector(
-            onTap: () => _switchToTab(tab.id),
-            onSecondaryTapDown: (details) => _showTabContextMenu(tab, details.globalPosition),
-            child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: isActive 
-                    ? Theme.of(context).colorScheme.primaryContainer
-                    : Theme.of(context).colorScheme.surfaceVariant,
-                borderRadius: BorderRadius.circular(8),
-                border: isActive 
-                    ? Border.all(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: 1,
-                      )
-                    : null,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 80, // 限制最大宽度
-                    child: Text(
-                      _shortenTabTitle(tab.displayName),
-                      style: TextStyle(
-                        color: isActive 
-                            ? Theme.of(context).colorScheme.onPrimaryContainer
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 11, // 稍微减小字体
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ),
-                  if (tabsState.tabs.length > 1) ...[
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: () => _closeTab(tab.id),
-                      child: Icon(
-                        Icons.close,
-                        size: 14,
-                        color: isActive 
-                            ? Theme.of(context).colorScheme.onPrimaryContainer
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildAddressBar(dynamic proxyState, dynamic activeTab) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 1,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // 地址栏
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _urlController,
-                  decoration: InputDecoration(
-                    hintText: '输入网址...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: () => _navigateToUrl(_urlController.text),
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  onSubmitted: _navigateToUrl,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          // 工具栏
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new),
-                onPressed: activeTab != null && (_canGoBack[activeTab.id] ?? false) 
-                    ? _goBack 
-                    : null,
-                tooltip: '后退',
-              ),
-              IconButton(
-                icon: const Icon(Icons.arrow_forward_ios),
-                onPressed: activeTab != null && (_canGoForward[activeTab.id] ?? false) 
-                    ? _goForward 
-                    : null,
-                tooltip: '前进',
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: activeTab != null ? _reload : null,
-                tooltip: '刷新',
-              ),
-              IconButton(
-                icon: const Icon(Icons.home),
-                onPressed: activeTab != null ? _goHome : null,
-                tooltip: '主页',
-              ),
-              const Spacer(),
-              // 代理状态指示器（可点击检测）
-              GestureDetector(
-                onTap: _checkProxyStatus,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: proxyState.isStart && proxyState.systemProxy 
-                        ? Colors.green 
-                        : Colors.grey,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        proxyState.isStart && proxyState.systemProxy 
-                            ? Icons.shield 
-                            : Icons.shield_outlined,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        proxyState.isStart && proxyState.systemProxy 
-                            ? '代理已启用' 
-                            : '代理未启用',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      if (proxyState.isStart && proxyState.systemProxy) ...[
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.touch_app,
-                          color: Colors.white,
-                          size: 12,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert),
-                onSelected: (value) {
-                  switch (value) {
-                    case 'downloads':
-                      _showDownloads();
-                      break;
-                    case 'download_current':
-                      _downloadCurrentPage();
-                      break;
-
-                    case 'settings':
-                      _showSettings();
-                      break;
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'downloads',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.download),
-                        const SizedBox(width: 8),
-                        Consumer(
-                          builder: (context, ref, child) {
-                            final downloadsState = ref.watch(downloadsProvider);
-                            final activeDownloads = downloadsState.activeDownloads.length;
-                            return Text('下载记录${activeDownloads > 0 ? ' ($activeDownloads)' : ''}');
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'download_current',
-                    child: const Row(
-                      children: [
-                        Icon(Icons.file_download),
-                        SizedBox(width: 8),
-                        Text('下载当前页面'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'settings',
-                    child: Row(
-                      children: [
-                        Icon(Icons.settings),
-                        SizedBox(width: 8),
-                        Text('设置'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showTabContextMenu(BrowserTab tab, Offset position) {
-    showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(position.dx, position.dy, 0, 0),
-      items: [
-        PopupMenuItem(
-          onTap: () => _switchToTab(tab.id),
-          child: const Text('切换到此标签'),
-        ),
-        PopupMenuItem(
-          onTap: () => _closeTab(tab.id),
-          child: const Text('关闭标签'),
-        ),
-        if (ref.read(browserTabsProvider).tabs.length > 1)
-          PopupMenuItem(
-            onTap: () => ref.read(browserTabsProvider.notifier).closeOtherTabs(tab.id),
-            child: const Text('关闭其他标签'),
-          ),
-      ],
-    );
-  }
-
-  void _showDownloads() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.5,
-        maxChildSize: 0.9,
-        builder: (context, scrollController) => DownloadsPanel(
-          scrollController: scrollController,
-        ),
-      ),
-    );
-  }
-
-  void _downloadCurrentPage() {
-    final activeTab = ref.read(browserTabsProvider).activeTab;
-    if (activeTab != null) {
-      final controller = _getOrCreateController(activeTab.id);
-      
-      // 获取当前页面URL - 使用正确的 API
-      controller.currentUrl().then((url) {
-        if (url != null) {
-          // 显示下载对话框
-          showDialog(
-            context: context,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: const Text('下载页面'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('URL: $url'),
-                    const SizedBox(height: 16),
-                    const Text('选择下载选项:'),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('取消'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _handleDownload(url);
-                    },
-                    child: const Text('下载'),
-                  ),
-                ],
-              );
-            },
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('无法获取当前页面URL')),
-          );
-        }
-      });
-    }
-  }
-
-  void _showSettings() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('浏览器设置功能正在开发中...')),
-    );
   }
 
   void _configureProxy(WebViewController controller) async {
     debugPrint('CONFIGURING WebView proxy using WebViewProxyManager...');
-    
+
     try {
       // 获取真实的代理端口和状态
       final proxyState = ref.read(proxyStateProvider);
-      debugPrint('Proxy state: isStart=${proxyState.isStart}, port=${proxyState.port}');
       
       if (!proxyState.isStart) {
-        debugPrint('Proxy is not started, skipping WebView proxy configuration');
+        debugPrint('Proxy is not enabled, skipping configuration');
         return;
       }
-      
-      // 使用真实的端口配置代理
-      await WebViewProxyManager.configureProxy(
-        controller,
-        host: '127.0.0.1',
-        port: proxyState.port, // 使用真实端口
-        type: ProxyType.http, // 改为 HTTP 代理，因为 WebView 更好支持
-      );
-      
-      // 检查代理状态
-      final status = await WebViewProxyManager.checkProxyStatus(controller);
-      debugPrint('Proxy status: $status');
-      
+
+      debugPrint('Setting up proxy for WebView: ${proxyState.host}:${proxyState.port}');
+
+      // 尝试使用 WebViewProxyManager 配置代理
+      await WebViewProxyManager.configureForWebView(controller, proxyState);
+
+      debugPrint('WebView proxy configuration completed successfully');
     } catch (e) {
-      debugPrint('Proxy configuration failed: $e');
+      debugPrint('Failed to configure WebView proxy: $e');
+      
       // 如果新方法失败，回退到原始方法
       _fallbackProxyConfiguration(controller);
     }
   }
-  
+
   void _fallbackProxyConfiguration(WebViewController controller) {
     debugPrint('Using fallback proxy configuration...');
     
@@ -833,6 +207,427 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       controller.reload();
     }
   }
+
+  // 获取或创建控制器
+  WebViewController _getOrCreateController(String tabId) {
+    if (!_controllers.containsKey(tabId)) {
+      final controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onProgress: (int progress) {
+              setState(() {
+                _loadingProgress[tabId] = progress;
+              });
+            },
+            onPageStarted: (String url) {
+              setState(() {
+                _loadingProgress[tabId] = 0;
+              });
+            },
+            onPageFinished: (String url) async {
+              setState(() {
+                _loadingProgress[tabId] = 100;
+              });
+              
+              // 获取页面标题
+              final title = await controller.getTitle();
+              if (title != null) {
+                setState(() {
+                  _currentTitles[tabId] = title;
+                });
+              }
+              
+              // 更新导航状态
+              final canGoBack = await controller.canGoBack();
+              final canGoForward = await controller.canGoForward();
+              setState(() {
+                _canGoBack[tabId] = canGoBack;
+                _canGoForward[tabId] = canGoForward;
+              });
+            },
+            onWebResourceError: (WebResourceError error) {
+              debugPrint('WebView error: ${error.description}');
+            },
+            onNavigationRequest: (NavigationRequest request) {
+              // 检查是否是下载链接
+              if (_isDownloadLink(request.url)) {
+                _handleDownload(request.url);
+                return NavigationDecision.prevent;
+              }
+              
+              return NavigationDecision.navigate;
+            },
+            // onDownloadStart 和 onFileSelector 已在 webview_flutter 4.13.0 中移除
+            // 下载处理现在通过 onNavigationRequest 实现
+          ),
+        );
+
+      _controllers[tabId] = controller;
+    }
+    
+    return _controllers[tabId]!;
+  }
+
+  bool _isDownloadLink(String url) {
+    final downloadExtensions = [
+      '.pdf', '.zip', '.rar', '.exe', '.dmg', '.pkg', '.deb', '.rpm', '.apk',
+      '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv',
+      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.mp3', '.mp4',
+      '.avi', '.mov', '.wmv', '.flv', '.tar', '.gz', '.7z', '.iso'
+    ];
+    
+    return downloadExtensions.any((ext) => url.toLowerCase().endsWith(ext));
+  }
+
+  void _handleDownload(String url) {
+    // 实现下载逻辑
+    debugPrint('开始下载: $url');
+    
+    // 这里可以集成实际的下载功能
+    // 例如使用 dio 包进行下载
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('开始下载: ${Uri.parse(url).pathSegments.last}')),
+    );
+  }
+
+  void _loadUrl(String url) {
+    final activeTab = ref.read(browserTabsProvider).activeTab;
+    if (activeTab != null) {
+      final controller = _getOrCreateController(activeTab.id);
+      
+      // 确保 URL 格式正确
+      String formattedUrl = url;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        formattedUrl = 'https://$url';
+      }
+      
+      controller.loadUrl(formattedUrl);
+    }
+  }
+
+  void _goBack() {
+    final activeTab = ref.read(browserTabsProvider).activeTab;
+    if (activeTab != null) {
+      final controller = _getOrCreateController(activeTab.id);
+      controller.goBack();
+    }
+  }
+
+  void _goForward() {
+    final activeTab = ref.read(browserTabsProvider).activeTab;
+    if (activeTab != null) {
+      final controller = _getOrCreateController(activeTab.id);
+      controller.goForward();
+    }
+  }
+
+  void _reload() {
+    final activeTab = ref.read(browserTabsProvider).activeTab;
+    if (activeTab != null) {
+      final controller = _getOrCreateController(activeTab.id);
+      controller.reload();
+    }
+  }
+
+  void _downloadCurrentPage() {
+    final activeTab = ref.read(browserTabsProvider).activeTab;
+    if (activeTab != null) {
+      final controller = _getOrCreateController(activeTab.id);
+      
+      // 获取当前页面URL - 使用正确的 API
+      controller.currentUrl().then((url) {
+        if (url != null) {
+          // 显示下载对话框
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('下载页面'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('URL: $url'),
+                    const SizedBox(height: 16),
+                    const Text('确定要下载此页面吗？'),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    child: const Text('取消'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _handleDownload(url);
+                    },
+                    child: const Text('下载'),
+                  ),
+                ],
+              );
+            },
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法获取当前页面URL')),
+          );
+        }
+      });
+    }
+  }
+
+  void _showSettings() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('浏览器设置功能正在开发中...')),
+    );
+  }
+
+  void _showDownloads() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => DownloadsPanel(
+          scrollController: scrollController,
+        ),
+      ),
+    );
+  }
+
+  void _showTabContextMenu(BrowserTab tab, Offset position) {
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx + 1,
+        position.dy + 1,
+      ),
+      items: [
+        PopupMenuItem(
+          onTap: () => _closeTab(tab.id),
+          child: const Row(
+            children: [
+              Icon(Icons.close),
+              SizedBox(width: 8),
+              Text('关闭标签页'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          onTap: () {
+            // 关闭其他标签页
+            final tabs = ref.read(browserTabsProvider).tabs;
+            for (final otherTab in tabs) {
+              if (otherTab.id != tab.id) {
+                _closeTab(otherTab.id);
+              }
+            }
+          },
+          child: const Row(
+            children: [
+              Icon(Icons.close_outlined),
+              SizedBox(width: 8),
+              Text('关闭其他标签页'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          onTap: () {
+            // 复制标签页URL
+            final controller = _getOrCreateController(tab.id);
+            controller.currentUrl().then((url) {
+              if (url != null) {
+                // 这里可以实现复制到剪贴板的功能
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('已复制: $url')),
+                );
+              }
+            });
+          },
+          child: const Row(
+            children: [
+              Icon(Icons.copy),
+              SizedBox(width: 8),
+              Text('复制链接'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _goHome() {
+    final activeTab = ref.read(browserTabsProvider).activeTab;
+    if (activeTab != null) {
+      final controller = _getOrCreateController(activeTab.id);
+      controller.loadUrl('https://www.google.com');
+    }
+  }
+
+  void _checkProxyStatus() {
+    final activeTab = ref.read(browserTabsProvider).activeTab;
+    if (activeTab != null) {
+      final controller = _getOrCreateController(activeTab.id);
+      
+      // 检查当前IP地址
+      controller.runJavaScript("""
+        fetch('https://httpbin.org/ip')
+          .then(response => response.json())
+          .then(data => {
+            FlutterChannel.postMessage(JSON.stringify({
+              type: 'ip_check',
+              ip: data.origin
+            }));
+          })
+          .catch(error => {
+            FlutterChannel.postMessage(JSON.stringify({
+              type: 'ip_check_error',
+              error: error.message
+            }));
+          });
+      """);
+    }
+  }
+
+  void _createNewTab() {
+    ref.read(browserTabsProvider.notifier).createNewTab();
+  }
+
+  void _closeTab(String tabId) {
+    ref.read(browserTabsProvider.notifier).closeTab(tabId);
+  }
+
+  void _switchToTab(String tabId) {
+    ref.read(browserTabsProvider.notifier).setActiveTab(tabId);
+  }
+
+  void _navigateToUrl(String url) {
+    if (url.isNotEmpty) {
+      _loadUrl(url);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final browserState = ref.watch(browserTabsProvider);
+    final activeTab = browserState.activeTab;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _urlController,
+                decoration: InputDecoration(
+                  hintText: '输入网址...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                onSubmitted: (value) {
+                  if (value.isNotEmpty) {
+                    _loadUrl(value);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _reload,
+              tooltip: '刷新',
+            ),
+            IconButton(
+              icon: const Icon(Icons.download),
+              onPressed: _downloadCurrentPage,
+              tooltip: '下载当前页面',
+            ),
+          ],
+        ),
+        bottom: activeTab != null && browserState.tabs.length > 1
+            ? TabBar(
+                controller: browserState.tabController,
+                isScrollable: true,
+                tabs: browserState.tabs.map((tab) {
+                  return Tab(
+                    text: _currentTitles[tab.id]?.length > 10
+                        ? '${_currentTitles[tab.id]?.substring(0, 10)}...'
+                        : _currentTitles[tab.id] ?? '新标签页',
+                  );
+                }).toList(),
+              )
+            : null,
+      ),
+      body: activeTab != null
+          ? Column(
+              children: [
+                // 进度条
+                if ((_loadingProgress[activeTab.id] ?? 0) < 100)
+                  LinearProgressIndicator(
+                    value: (_loadingProgress[activeTab.id] ?? 0) / 100,
+                  ),
+                
+                // 导航栏
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: _canGoBack[activeTab.id] == true ? _goBack : null,
+                        tooltip: '后退',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_forward),
+                        onPressed: _canGoForward[activeTab.id] == true ? _goForward : null,
+                        tooltip: '前进',
+                      ),
+                      Expanded(
+                        child: Text(
+                          _currentTitles[activeTab.id] ?? '加载中...',
+                          style: const TextStyle(fontSize: 16),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // WebView 内容
+                Expanded(
+                  child: _getOrCreateController(activeTab.id).buildWidget(),
+                ),
+              ],
+            )
+          : const Center(
+              child: Text('没有打开的标签页'),
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          ref.read(browserTabsProvider.notifier).createNewTab();
+        },
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    super.dispose();
+  }
 }
 
 class DownloadsPanel extends ConsumerWidget {
@@ -848,48 +643,30 @@ class DownloadsPanel extends ConsumerWidget {
     final downloadsState = ref.watch(downloadsProvider);
     
     return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 标题栏
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: Theme.of(context).dividerColor,
-                  width: 0.5,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                '下载管理',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.download),
-                const SizedBox(width: 8),
-                Text(
-                  '下载管理',
-                  style: Theme.of(context).textTheme.titleLarge,
+              if (downloadsState.downloads.isNotEmpty)
+                TextButton(
+                  onPressed: () {
+                    ref.read(downloadsProvider.notifier).clearCompleted();
+                  },
+                  child: const Text('清除已完成'),
                 ),
-                const Spacer(),
-                if (downloadsState.completedDownloads.isNotEmpty)
-                  TextButton(
-                    onPressed: () {
-                      ref.read(downloadsProvider.notifier).clearCompleted();
-                    },
-                    child: const Text('清除已完成'),
-                  ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
+            ],
           ),
-          
-          // 下载列表
+          const SizedBox(height: 16),
           Expanded(
             child: downloadsState.downloads.isEmpty
                 ? Center(
