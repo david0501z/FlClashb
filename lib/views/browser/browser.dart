@@ -41,7 +41,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       proxyStateProvider,
       (previous, next) {
         if (previous != next) {
-          _updateAllControllersProxy();
+          // 代理状态变化时的处理逻辑
         }
       },
     );
@@ -130,19 +130,6 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     }
   }
 
-  void _updateAllControllersProxy() {
-    // 更新所有现有WebView控制器的代理配置
-    for (final entry in _controllers.entries) {
-      final tabId = entry.key;
-      final controller = entry.value;
-      
-      debugPrint('Updating proxy for tab: $tabId');
-      _configureProxy(controller);
-      
-      // 重新加载当前页面以应用新的代理设置
-      controller.reload();
-    }
-  }
 
   void _configureProxy(WebViewController controller) async {
     debugPrint('CONFIGURING WebView proxy using WebViewProxyManager...');
@@ -196,18 +183,7 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       })();
     """);
   }
-    // 更新所有现有WebView控制器的代理配置
-    for (final entry in _controllers.entries) {
-      final tabId = entry.key;
-      final controller = entry.value;
-      
-      debugPrint('Updating proxy for tab: $tabId');
-      _configureProxy(controller);
-      
-      // 重新加载当前页面以应用新的代理设置
-      controller.reload();
-    }
-  }
+
 
   WebViewController _getOrCreateController(String tabId) {
     if (!_controllers.containsKey(tabId)) {
@@ -256,15 +232,18 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
               });
             },
             onPageStarted: (String url) {
-              setState(() {
-                _loadingProgress[tabId] = 0;
-                _currentUrls[tabId] = url;
-              });
+              if (mounted) {
+                setState(() {
+                  _loadingProgress[tabId] = 0;
+                });
+              }
             },
             onPageFinished: (String url) async {
-              setState(() {
-                _loadingProgress[tabId] = 100;
-              });
+              if (mounted) {
+                setState(() {
+                  _loadingProgress[tabId] = 100;
+                });
+              }
 
               // 页面加载完成后再次强制设置代理
               _configureProxy(controller);
@@ -589,11 +568,10 @@ void _loadUrl(String url) {
         ),
         bottom: activeTab != null && browserState.tabs.length > 1
             ? TabBar(
-                controller: browserState.tabController,
                 isScrollable: true,
                 tabs: browserState.tabs.map((tab) {
                   return Tab(
-                    text: _currentTitles[tab.id]?.length > 10
+                    text: (_currentTitles[tab.id]?.length ?? 0) > 10
                         ? '${_currentTitles[tab.id]?.substring(0, 10)}...'
                         : _currentTitles[tab.id] ?? '新标签页',
                   );
@@ -617,7 +595,7 @@ void _loadUrl(String url) {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.arrow_back),
-                        onPressed: _canGoBack[activeTab.id] == true ? _goBack : null,
+                        onPressed: (_canGoBack[activeTab.id] ?? false) ? _goBack : null,
                         tooltip: '后退',
                       ),
                       IconButton(
