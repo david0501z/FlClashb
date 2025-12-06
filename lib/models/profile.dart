@@ -56,8 +56,8 @@ abstract class Profile with _$Profile {
     @Default({}) SelectedMap selectedMap,
     @Default({}) Set<String> unfoldSet,
     @Default(OverrideData()) OverrideData overrideData,
-    @JsonKey(includeToJson: false, includeFromJson: false)
     @Default(false)
+    @JsonKey(includeToJson: false, includeFromJson: false)
     bool isUpdating,
   }) = _Profile;
 

@@ -783,22 +783,22 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   void _fallbackProxyConfiguration(WebViewController controller) {
     debugPrint('Using fallback proxy configuration...');
     
-    controller.runJavaScript("""
+    controller.runJavaScript('''
       (function() {
-        console.log('[FALLBACK PROXY] Basic enforcement activated');
+        console.log("[FALLBACK PROXY] Basic enforcement activated");
         
         // 基础的网络请求拦截
         if (window.fetch) {
           const originalFetch = window.fetch;
           window.fetch = function(url, options = {}) {
-            console.log('[FALLBACK PROXY] Fetch:', url);
+            console.log("[FALLBACK PROXY] Fetch:", url);
             return originalFetch.call(this, url, options);
           };
         }
         
-        console.log('[FALLBACK PROXY] Setup completed');
+        console.log("[FALLBACK PROXY] Setup completed");
       })();
-    """);
+    ''');
   }
 
   void _updateAllControllersProxy() {
