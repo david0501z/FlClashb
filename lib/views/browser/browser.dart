@@ -304,7 +304,8 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   String _extractFileName(String? contentDisposition, String url) {
     if (contentDisposition != null && contentDisposition.isNotEmpty) {
       // 从 Content-Disposition 中提取文件名
-      final match = RegExp(r"filename[^;=\n]*=(\"[^\"]*\"|'[^']*'|[^;\n]*)", multiLine: true).firstMatch(contentDisposition);
+      final match = RegExp(r'filename[^;=\n]*=("[^"]+"|\'[^\']+\'|[^;\n]+)', multiLine: true).firstMatch(contentDisposition);
+
       if (match != null) {
         String filename = match.group(1)?.trim() ?? '';
         if (filename.startsWith('"') && filename.endsWith('"')) {
