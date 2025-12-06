@@ -14,8 +14,6 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart' as webview_android;
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart' as webview_wk;
-import 'package:webview_flutter/platform_interface.dart';
-import 'package:file_picker/platform_file.dart';
 
 class BrowserView extends ConsumerStatefulWidget {
   const BrowserView({super.key});
@@ -24,7 +22,7 @@ class BrowserView extends ConsumerStatefulWidget {
   ConsumerState<BrowserView> createState() => _BrowserViewState();
 }
 
-class _BrowserViewState extends ConsumerWidget {
+class _BrowserViewState extends ConsumerState<BrowserView> {
   final TextEditingController _urlController = TextEditingController();
   final Map<String, WebViewController> _controllers = {};
   final Map<String, int> _loadingProgress = {};
@@ -133,91 +131,10 @@ class _BrowserViewState extends ConsumerWidget {
     super.dispose();
   }
 
-  // 文件选择器回调函数
-  Future<WebFileChooserResult> _onShowFileSelector(
-    WebViewController controller,
-    WebFileChooserParams params,
-  ) async {
-    debugPrint('File selector called: ${params.fileInputType}, accept: ${params.acceptTypes}');
-    
-    try {
-      // 确定文件类型
-      FileType fileType = FileType.any;
-      if (params.acceptTypes.isNotEmpty) {
-        String acceptedTypes = params.acceptTypes.join(',').toLowerCase();
-        if (acceptedTypes.contains('image')) {
-          fileType = FileType.image;
-        } else if (acceptedTypes.contains('video')) {
-          fileType = FileType.video;
-        } else if (acceptedTypes.contains('audio')) {
-          fileType = FileType.audio;
-        } else if (acceptedTypes.contains('.pdf') || acceptedTypes.contains('pdf')) {
-          fileType = FileType.custom;
-        }
-      }
-      
-      final result = await FilePicker.platform.pickFiles(
-        type: fileType,
-        allowMultiple: params.isMultiple,
-        withData: false,
-      );
-      
-      if (result != null && result.files.isNotEmpty) {
-        List<XFile> files = [];
-        for (PlatformFile file in result.files) {
-          if (file.path != null) {
-            files.add(XFile(file.path!));
-          }
-        }
-        return WebFileChooserResult(filePath: files);
-      } else {
-        return WebFileChooserResult(filePath: []);
-      }
-    } catch (e) {
-      debugPrint('File picker error: $e');
-      return WebFileChooserResult(filePath: []);
-    }
-  }
-
-  // 提取文件名的辅助函数
-  String _extractFileName(String contentDisposition, String url) {
-    if (contentDisposition != null && contentDisposition.isNotEmpty) {
-      // 从 Content-Disposition 中提取文件名
-      final match = RegExp(r'filename[^;=\n]*=(([\'']).*?\2|[^;\n]*)').firstMatch(contentDisposition);
-      if (match != null) {
-        String filename = match.group(1)?.trim() ?? '';
-        if (filename.startsWith('"') && filename.endsWith('"')) {
-          filename = filename.substring(1, filename.length - 1);
-        }
-        if (filename.startsWith("'") && filename.endsWith("'")) {
-          filename = filename.substring(1, filename.length - 1);
-        }
-        if (filename.isNotEmpty) {
-          return Uri.decodeComponent(filename);
-        }
-      }
-    }
-    
-    // 如果无法从 Content-Disposition 获取，从 URL 提取
-    try {
-      final uri = Uri.parse(url);
-      String fileName = uri.pathSegments.last;
-      if (fileName.isNotEmpty) {
-        return Uri.decodeComponent(fileName);
-      }
-    } catch (e) {
-      debugPrint('Error parsing URL: $e');
-    }
-    
-    // 默认文件名
-    return 'download_${DateTime.now().millisecondsSinceEpoch}';
-  }
-
   WebViewController _getOrCreateController(String tabId) {
     if (!_controllers.containsKey(tabId)) {
       final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setAllowFileLoading(true); // 允许文件加载
+        ..setJavaScriptMode(JavaScriptMode.unrestricted);
       
       // 最直接的代理设置方法 - 在WebView加载前设置
       if (Platform.isAndroid) {
@@ -234,8 +151,15 @@ class _BrowserViewState extends ConsumerWidget {
           }
         """);
         
-        // 设置文件选择器回调
-        controller.setOnShowFileSelector(_onShowFileSelector);
+        // 为 Android WebView 设置文件选择器
+        if (controller is webview_android.AndroidWebViewController) {
+          (controller as webview_android.AndroidWebViewController)
+            ..setWebViewClient(webview_android.AndroidWebViewClient())
+            ..onWebViewCreated = (webview_android.AndroidWebViewController controller) {
+              // 设置文件选择器回调
+              controller.setOnShowFileSelector(_onShowFileSelector);
+            };
+        }
       } else if (Platform.isIOS) {
         // iOS WKWebView代理设置
         controller.runJavaScript("""
@@ -325,22 +249,89 @@ class _BrowserViewState extends ConsumerWidget {
               return NavigationDecision.navigate;
             },
           ),
-        )
-        // 添加下载监听器
-        ..setDownloadListener((String url, String userAgent, String contentDisposition, String mimeType, int contentLength) {
-          debugPrint('Download started: $url, Content-Disposition: $contentDisposition, MimeType: $mimeType');
-          
-          // 从Content-Disposition中提取文件名
-          String fileName = _extractFileName(contentDisposition, url);
-          
-          // 使用应用内下载管理器处理下载
-          ref.read(downloadsProvider.notifier).startDownload(url, fileName: fileName);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('开始下载: $fileName')),
-          );
-        });
+        );
     }
     return _controllers[tabId]!;
+  }
+
+  // 文件选择器回调函数
+  Future<WebUriFileChooserResult> _onShowFileSelector(
+    webview_android.AndroidWebViewController controller,
+    webview_android.WebFileChooserParams params,
+  ) async {
+    debugPrint('File selector called: acceptTypes: ${params.acceptTypes}, isMultiple: ${params.isMultiple}');
+    
+    try {
+      // 确定文件类型
+      FileType fileType = FileType.any;
+      if (params.acceptTypes != null && params.acceptTypes.isNotEmpty) {
+        String acceptedTypes = params.acceptTypes.join(',').toLowerCase();
+        if (acceptedTypes.contains('image')) {
+          fileType = FileType.image;
+        } else if (acceptedTypes.contains('video')) {
+          fileType = FileType.video;
+        } else if (acceptedTypes.contains('audio')) {
+          fileType = FileType.audio;
+        } else if (acceptedTypes.contains('.pdf') || acceptedTypes.contains('pdf')) {
+          fileType = FileType.custom;
+        }
+      }
+      
+      final result = await FilePicker.platform.pickFiles(
+        type: fileType,
+        allowMultiple: params.isMultiple ?? false,
+        withData: false,
+      );
+      
+      if (result != null && result.files.isNotEmpty) {
+        List<String> filePaths = [];
+        for (var file in result.files) {
+          if (file.path != null) {
+            filePaths.add(file.path!);
+          }
+        }
+        return WebUriFileChooserResult(uriPaths: filePaths);
+      } else {
+        return WebUriFileChooserResult(uriPaths: []);
+      }
+    } catch (e) {
+      debugPrint('File picker error: $e');
+      return WebUriFileChooserResult(uriPaths: []);
+    }
+  }
+
+  // 提取文件名的辅助函数
+  String _extractFileName(String? contentDisposition, String url) {
+    if (contentDisposition != null && contentDisposition.isNotEmpty) {
+      // 从 Content-Disposition 中提取文件名
+      final match = RegExp(r'filename[^;=\n]*=(([\'"]).*?\2|[^;\n]*)').firstMatch(contentDisposition);
+      if (match != null) {
+        String filename = match.group(1)?.trim() ?? '';
+        if (filename.startsWith('"') && filename.endsWith('"')) {
+          filename = filename.substring(1, filename.length - 1);
+        }
+        if (filename.startsWith("'") && filename.endsWith("'")) {
+          filename = filename.substring(1, filename.length - 1);
+        }
+        if (filename.isNotEmpty) {
+          return Uri.decodeComponent(filename);
+        }
+      }
+    }
+    
+    // 如果无法从 Content-Disposition 获取，从 URL 提取
+    try {
+      final uri = Uri.parse(url);
+      String fileName = uri.pathSegments.last;
+      if (fileName.isNotEmpty) {
+        return Uri.decodeComponent(fileName);
+      }
+    } catch (e) {
+      debugPrint('Error parsing URL: $e');
+    }
+    
+    // 默认文件名
+    return 'download_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   bool _isDownloadLink(String url) {
@@ -349,7 +340,7 @@ class _BrowserViewState extends ConsumerWidget {
   }
 
   void _handleDownload(String url) {
-    final fileName = _extractFileName('', url); // 使用辅助函数提取文件名
+    final fileName = _extractFileName(null, url); // 使用辅助函数提取文件名
     ref.read(downloadsProvider.notifier).startDownload(url, fileName: fileName);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('开始下载: $fileName')),
