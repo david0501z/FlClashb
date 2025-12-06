@@ -300,22 +300,23 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
     }
   }
 
-  // 提取文件名的辅助函数
+    // 提取文件名的辅助函数
   String _extractFileName(String? contentDisposition, String url) {
     if (contentDisposition != null && contentDisposition.isNotEmpty) {
-      // 从 Content-Disposition 中提取文件名
-      final match = RegExp(r'filename[^;=\n]*=("[^"]+"|\'[^\']+\'|[^;\n]+)', multiLine: true).firstMatch(contentDisposition);
-
-      if (match != null) {
-        String filename = match.group(1)?.trim() ?? '';
-        if (filename.startsWith('"') && filename.endsWith('"')) {
-          filename = filename.substring(1, filename.length - 1);
-        }
-        if (filename.startsWith("'") && filename.endsWith("'")) {
-          filename = filename.substring(1, filename.length - 1);
-        }
-        if (filename.isNotEmpty) {
-          return Uri.decodeComponent(filename);
+      // 从 Content-Disposition 中提取文件名 - 使用更简单的方法
+      final parts = contentDisposition.split(';');
+      for (final part in parts) {
+        if (part.trim().startsWith('filename=')) {
+          String filename = part.trim().substring(9);
+          if (filename.startsWith('"') && filename.endsWith('"')) {
+            filename = filename.substring(1, filename.length - 1);
+          }
+          if (filename.startsWith("'") && filename.endsWith("'")) {
+            filename = filename.substring(1, filename.length - 1);
+          }
+          if (filename.isNotEmpty) {
+            return Uri.decodeComponent(filename);
+          }
         }
       }
     }
