@@ -255,9 +255,9 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
   }
 
   // 文件选择器回调函数
-  Future<WebUriFileChooserResult> _onShowFileSelector(
+  Future<String?> _onShowFileSelector(
     webview_android.AndroidWebViewController controller,
-    webview_android.WebFileChooserParams params,
+    webview_android.FileChooserParams params,
   ) async {
     debugPrint('File selector called: acceptTypes: ${params.acceptTypes}, isMultiple: ${params.isMultiple}');
     
@@ -284,19 +284,14 @@ class _BrowserViewState extends ConsumerState<BrowserView> {
       );
       
       if (result != null && result.files.isNotEmpty) {
-        List<String> filePaths = [];
-        for (var file in result.files) {
-          if (file.path != null) {
-            filePaths.add(file.path!);
-          }
-        }
-        return WebUriFileChooserResult(uriPaths: filePaths);
+        // 返回第一个选择的文件路径
+        return result.files.first.path;
       } else {
-        return WebUriFileChooserResult(uriPaths: []);
+        return null;
       }
     } catch (e) {
       debugPrint('File picker error: $e');
-      return WebUriFileChooserResult(uriPaths: []);
+      return null;
     }
   }
 
